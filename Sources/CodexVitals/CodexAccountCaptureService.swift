@@ -1499,7 +1499,9 @@ private final class OAuthCallbackServer: @unchecked Sendable {
             throw CodexAccountCaptureError.callbackServerUnavailable
         }
         self.state = state
-        listener = try NWListener(using: .tcp, on: port)
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: port)
+        listener = try NWListener(using: parameters)
         listener.newConnectionHandler = { [weak self] connection in
             self?.handle(connection)
         }

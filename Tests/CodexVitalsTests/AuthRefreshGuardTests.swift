@@ -374,6 +374,25 @@ final class AuthRefreshGuardTests: XCTestCase {
         )
     }
 
+    func testOAuthCallbackListenerBindsLoopbackOnly() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let serviceURL = root.appendingPathComponent("Sources/CodexVitals/CodexAccountCaptureService.swift")
+        let text = try String(contentsOf: serviceURL, encoding: .utf8)
+
+        XCTAssertTrue(
+            text.contains(#"requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: port)"#),
+            "OAuth login capture must bind its callback listener to the IPv4 loopback interface"
+        )
+        XCTAssertTrue(
+            text.contains("listener = try NWListener(using: parameters)"),
+            "OAuth login capture must construct its listener with the loopback-constrained parameters"
+        )
+        XCTAssertFalse(
+            text.contains("listener = try NWListener(using: .tcp, on: port)"),
+            "The default listener constructor exposes the OAuth callback port on every interface"
+        )
+    }
+
     private var forbiddenRefreshGrantSnippets: [String] {
         [
             #""grant_type","refresh_token""#,

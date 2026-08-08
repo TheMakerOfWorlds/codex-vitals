@@ -5,7 +5,7 @@ let package = Package(
     name: "CodexVitals",
     platforms: [.macOS(.v13)],
     dependencies: [
-        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4")
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.5")
     ],
     targets: [
         .executableTarget(

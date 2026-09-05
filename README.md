@@ -1,5 +1,7 @@
 # Codex Vitals: Codex and Claude account usage from the menu bar
 
+**Keystone Science — Nathan Stone and Jackson Stone**
+
 See [personal macOS builds](docs/LOCAL_DEVELOPMENT.md) for build commands, update sources, and verification of the borderless interface.
 
 <p align="center">
@@ -108,7 +110,7 @@ Download [`CodexVitals-Windows-1.0.0-Setup.exe`](https://github.com/Joowonoil/Co
 ### Build From Source
 
 ```bash
-git clone https://github.com/Joowonoil/Codex-Vitals.git
+git clone https://github.com/KeystoneScience/codex-vitals.git
 cd codex-vitals
 swift test
 swift build

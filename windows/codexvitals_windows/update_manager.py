@@ -142,7 +142,7 @@ class UpdateManager:
         library.win_sparkle_set_appcast_url(APPCAST_URL.encode("utf-8"))
         if library.win_sparkle_set_eddsa_public_key(EDDSA_PUBLIC_KEY.encode("ascii")) != 1:
             raise UpdateManagerError("The Windows update public key is invalid.")
-        library.win_sparkle_set_app_details("RamterStudio", "Codex Vitals", APP_VERSION)
+        library.win_sparkle_set_app_details("Keystone Science", "Codex Vitals", APP_VERSION)
         library.win_sparkle_set_app_build_version(APP_VERSION)
         library.win_sparkle_set_registry_path(b"Software\\RamterStudio\\Codex Vitals\\WinSparkle")
         library.win_sparkle_set_automatic_check_for_updates(1 if automatically_check else 0)

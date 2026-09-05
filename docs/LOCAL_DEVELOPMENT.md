@@ -49,3 +49,9 @@ The feed points to signed upstream GitHub Releases. The original public verifica
 - Native UI inspection timed out; visual verification used the app renderer, with installation and live refresh verified separately.
 
 Screenshots contain sample accounts. Private local paths, installation logs, and account data are excluded from this document.
+
+## Project credits
+
+App credits, bundled CREDITS.txt, package metadata, and project pages identify Keystone Science, Nathan Stone, and Jackson Stone. The header remains plain Codex Vitals. The existing signed update feed, credential-storage identifiers, package identities, and inherited open-source license notices remain stable.
+
+The same release has been installed on two Macs with their existing accounts retained separately. Local validation includes 101 Swift tests and 40 Windows unit tests, plus the light and dark credit renders in `docs/credits.png` and `docs/credits-dark.png`.

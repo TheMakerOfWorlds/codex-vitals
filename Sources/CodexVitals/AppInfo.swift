@@ -2,10 +2,11 @@ import Foundation
 
 enum AppInfo {
     static let name = "Codex Vitals"
-    static let homepageURL = URL(string: "https://ramterstudio.com/codex-vitals/")!
-    static let repositoryURL = URL(string: "https://github.com/Joowonoil/Codex-Vitals")!
+    static let publisher = "Keystone Science"
+    static let contributors = "Nathan Stone · Jackson Stone"
+    static let homepageURL = URL(string: "https://github.com/KeystoneScience/codex-vitals")!
+    static let repositoryURL = URL(string: "https://github.com/KeystoneScience/codex-vitals")!
     static let releasesURL = URL(string: "https://github.com/Joowonoil/Codex-Vitals/releases")!
-    static let keystoneRepositoryURL = URL(string: "https://github.com/KeystoneScience/codex-vitals")!
 
     static var isPersonalBuild: Bool {
         Bundle.main.object(forInfoDictionaryKey: "CodexVitalsPersonalBuild") as? Bool ?? false

@@ -45,6 +45,8 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(AppInfo.name)
                     .font(.system(size: 17, weight: .semibold))
+                AppCreditsView()
+                    .padding(.vertical, 4)
                 Text(AppInfo.versionText)
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
@@ -159,9 +161,9 @@ struct SettingsView: View {
     private var updateSettings: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Official releases · Joowonoil/Codex-Vitals")
+                Text("Signed upstream releases")
                     .font(.system(size: 11, weight: .medium))
-                Text("Signed updates via Sparkle. KeystoneScience has no release feed.")
+                Text("Update checks use the original signed release feed.")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                 if AppInfo.isPersonalBuild {
@@ -220,15 +222,11 @@ struct SettingsView: View {
     private var aboutSettings: some View {
         VStack(spacing: 0) {
             Button { open(AppInfo.repositoryURL) } label: {
-                externalRow("Source on GitHub", systemImage: "chevron.left.forwardslash.chevron.right") { externalArrow }
-            }
-            .buttonStyle(.plain)
-            Button { open(AppInfo.keystoneRepositoryURL) } label: {
-                externalRow("KeystoneScience fork", systemImage: "arrow.triangle.branch") { externalArrow }
+                externalRow("Keystone Science on GitHub", systemImage: "chevron.left.forwardslash.chevron.right") { externalArrow }
             }
             .buttonStyle(.plain)
             Button { open(AppInfo.releasesURL) } label: {
-                externalRow("Release history", systemImage: "shippingbox") { externalArrow }
+                externalRow("Upstream release history", systemImage: "shippingbox") { externalArrow }
             }
             .buttonStyle(.plain)
         }
@@ -374,5 +372,19 @@ private extension SMAppService.Status {
         @unknown default:
             return "Launch at Login status is unknown"
         }
+    }
+}
+
+struct AppCreditsView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(AppInfo.publisher)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.primary)
+            Text(AppInfo.contributors)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
     }
 }

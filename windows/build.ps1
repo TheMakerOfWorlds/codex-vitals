@@ -88,11 +88,11 @@ VSVersionInfo(
       StringTable(
         '040904B0',
         [
-          StringStruct('CompanyName', 'RamterStudio'),
+          StringStruct('CompanyName', 'Keystone Science'),
           StringStruct('FileDescription', 'Codex Vitals for Windows'),
           StringStruct('FileVersion', '$dottedFileVersion'),
           StringStruct('InternalName', 'CodexVitals'),
-          StringStruct('LegalCopyright', 'Copyright 2026 RamterStudio'),
+          StringStruct('LegalCopyright', 'Copyright 2026 Keystone Science. Nathan Stone and Jackson Stone.'),
           StringStruct('OriginalFilename', 'CodexVitals.exe'),
           StringStruct('ProductName', 'Codex Vitals'),
           StringStruct('ProductVersion', '$Version')

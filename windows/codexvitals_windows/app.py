@@ -26,7 +26,7 @@ from .app_settings import (
     is_startup_enabled,
     set_startup_enabled,
 )
-from .brand_icon import build_codex_vitals_icon, build_ramter_studio_logo
+from .brand_icon import build_codex_vitals_icon
 from .codex_api import AuthBackedIdentity
 from .codex_api import fetch_snapshot
 from .codex_desktop import CodexDesktopControlError, restart_codex_desktop
@@ -39,10 +39,9 @@ from .update_manager import UpdateManager, UpdateManagerError
 
 APP_DISPLAY_NAME = "Codex Vitals"
 APP_INTERNAL_NAME = "CodexVitals"
-HOMEPAGE_URL = "https://ramterstudio.com/codex-vitals/"
-GITHUB_URL = "https://github.com/Joowonoil/Codex-Vitals"
-FEEDBACK_URL = "mailto:ramterstudio@gmail.com?subject=Codex%20Vitals%20Feedback"
-RAMTER_STUDIO_URL = "https://ramterstudio.com"
+HOMEPAGE_URL = "https://github.com/KeystoneScience/codex-vitals"
+GITHUB_URL = "https://github.com/KeystoneScience/codex-vitals"
+FEEDBACK_URL = "https://github.com/KeystoneScience/codex-vitals/issues"
 
 
 @dataclass(slots=True)
@@ -227,88 +226,6 @@ class RoundedButton(tk.Canvas):
         self.create_polygon(points, smooth=True, fill=fill, outline=outline)
 
 
-class StudioLogoLink(tk.Canvas):
-    def __init__(
-        self,
-        parent: tk.Widget,
-        *,
-        logo: ImageTk.PhotoImage,
-        command: Callable[[], None],
-        palette: dict[str, str],
-        caption_font: tuple[str, int] | tuple[str, int, str],
-        icon_font: tuple[str, int] | tuple[str, int, str],
-        external_icon: str,
-        height: int = 59,
-    ) -> None:
-        super().__init__(
-            parent,
-            height=height,
-            bg=palette["panel"],
-            highlightthickness=0,
-            bd=0,
-            cursor="hand2",
-            takefocus=0,
-        )
-        self.logo = logo
-        self.command = command
-        self.palette = palette
-        self.caption_font = caption_font
-        self.icon_font = icon_font
-        self.external_icon = external_icon
-        self.link_height = height
-        self._hovering = False
-
-        self.bind("<Configure>", self._redraw)
-        self.bind("<Enter>", self._on_enter)
-        self.bind("<Leave>", self._on_leave)
-        self.bind("<Button-1>", self._on_click)
-        HoverTooltip(self, "Open RamterStudio website", palette)
-        self._redraw()
-
-    def _on_enter(self, _: tk.Event[Any]) -> None:
-        self._hovering = True
-        self._redraw()
-
-    def _on_leave(self, _: tk.Event[Any]) -> None:
-        self._hovering = False
-        self._redraw()
-
-    def _on_click(self, _: tk.Event[Any]) -> None:
-        self.command()
-
-    def _redraw(self, _: tk.Event[Any] | None = None) -> None:
-        self.delete("all")
-        width = max(1, self.winfo_width())
-        height = max(1, self.winfo_height())
-        if self._hovering:
-            draw_rounded_rectangle(
-                self,
-                0,
-                2,
-                width - 1,
-                height - 2,
-                9,
-                fill=self.palette["control_hover"],
-                outline=self.palette["control_border"],
-            )
-
-        self.create_text(
-            2,
-            6,
-            text="Made by",
-            fill=self.palette["muted"],
-            font=self.caption_font,
-            anchor="nw",
-        )
-        self.create_image(2, 27, image=self.logo, anchor="nw")
-        self.create_text(
-            width - 6,
-            height / 2,
-            text=self.external_icon,
-            fill=self.palette["muted"],
-            font=self.icon_font,
-            anchor="e",
-        )
 
 
 class DarkScrollbar(tk.Canvas):
@@ -498,7 +415,6 @@ class CodexVitalsWindowsApp:
 
         self.window_icon_images: list[ImageTk.PhotoImage] = []
         self.brand_icon_image: ImageTk.PhotoImage | None = None
-        self.ramter_studio_logo_image: ImageTk.PhotoImage | None = None
         self._set_window_icon()
 
         self._configure_styles()
@@ -1515,20 +1431,12 @@ class CodexVitalsWindowsApp:
         ).pack(side="right", padx=(0, 2))
 
         tk.Frame(about_panel, bg=self.palette["divider"], height=1).pack(fill="x")
-        self.ramter_studio_logo_image = ImageTk.PhotoImage(
-            build_ramter_studio_logo(150, 24, self.palette["text"]),
-            master=self.root,
-        )
-        studio_link = StudioLogoLink(
+        tk.Label(
             about_panel,
-            logo=self.ramter_studio_logo_image,
-            command=lambda: self._open_external(RAMTER_STUDIO_URL),
-            palette=self.palette,
-            caption_font=self.fonts["caption"],
-            icon_font=self.fonts["icon_small"],
-            external_icon=self.icons["external"],
-        )
-        studio_link.pack(fill="x")
+            text="Keystone Science\nNathan Stone · Jackson Stone",
+            bg=self.palette["panel"], fg=self.palette["text"],
+            font=self.fonts["body_small"], anchor="w", justify="left", pady=12,
+        ).pack(fill="x")
 
         self._settings_section_label("UPDATES")
         if self.update_manager.is_store_build:

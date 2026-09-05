@@ -4,6 +4,8 @@ All notable changes to Codex Vitals will be documented here.
 
 ## Unreleased
 
+- Updated app, package, and project credits to Keystone Science, Nathan Stone, and Jackson Stone; retained functional update/credential identifiers and open-source license notices.
+
 - Renamed the account action to Switch and dimmed the complete Waiting for reset group to 80% opacity.
 
 - Rebuilt the personal macOS interface around borderless rows, a plain title, single plan badges, stacked quota bars, and visible Switch controls.

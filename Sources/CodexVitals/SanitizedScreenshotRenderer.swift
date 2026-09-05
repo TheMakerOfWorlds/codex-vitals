@@ -8,12 +8,26 @@ enum SanitizedScreenshotRenderer {
     static func render() throws {
         let repository = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let dark = CommandLine.arguments.contains("--dark")
-        let output = repository.appendingPathComponent(dark ? "docs/screenshot-dark.png" : "docs/screenshot.png")
+        let credits = CommandLine.arguments.contains("--credits")
+        let filename = credits ? (dark ? "credits-dark.png" : "credits.png") : (dark ? "screenshot-dark.png" : "screenshot.png")
+        let output = repository.appendingPathComponent("docs/" + filename)
         let viewModel = UsageViewModel(resetNotificationService: ScreenshotNotificationService(), loadPersistedState: false)
         configure(viewModel)
-        let rootView = SanitizedProductScreenshot(viewModel: viewModel)
-            .environment(\.colorScheme, dark ? .dark : .light)
-        let size = NSSize(width: ContentView.preferredWidth, height: 526)
+        let size = credits ? NSSize(width: 400, height: 140) : NSSize(width: ContentView.preferredWidth, height: 526)
+        let rootView = Group {
+            if credits {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(AppInfo.name).font(.system(size: 17, weight: .semibold))
+                    AppCreditsView()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .padding(24)
+                .background(Theme.appBackground)
+            } else {
+                SanitizedProductScreenshot(viewModel: viewModel)
+            }
+        }
+        .environment(\.colorScheme, dark ? .dark : .light)
         let hostingView = NSHostingView(rootView: rootView)
         hostingView.frame = NSRect(origin: .zero, size: size)
 

@@ -3,8 +3,8 @@
 #endif
 
 #define MyAppName "Codex Vitals"
-#define MyAppPublisher "RamterStudio"
-#define MyAppURL "https://ramterstudio.com/codex-vitals/"
+#define MyAppPublisher "Keystone Science"
+#define MyAppURL "https://github.com/KeystoneScience/codex-vitals"
 #define MyAppExeName "CodexVitals.exe"
 
 [Setup]

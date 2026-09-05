@@ -7,6 +7,7 @@
 #   BUNDLE_ID     CFBundleIdentifier.
 #   VERSION       CFBundleShortVersionString and CFBundleVersion.
 #   INSTALL_APPS  If 1, copies the generated app to /Applications.
+#   PERSONAL_BUILD If 1, keeps update checks but requires manual installation.
 #   SIGN_IDENTITY Code signing identity. Defaults to ad-hoc signing (-).
 #
 # Usage:
@@ -58,7 +59,9 @@ ditto "$SPARKLE_FRAMEWORK" "${OUT}/Contents/Frameworks/Sparkle.framework"
 cp "${ROOT}/Support/Info.plist" "${OUT}/Contents/Info.plist"
 cp "$ICNS" "${OUT}/Contents/Resources/AppIcon.icns"
 cp "${ROOT}/Support/codex.png" "${OUT}/Contents/Resources/codex.png"
+cp "${ROOT}/Support/ClaudeSpark.png" "${OUT}/Contents/Resources/ClaudeSpark.png"
 cp "${ROOT}/Support/RamterStudioLogo.png" "${OUT}/Contents/Resources/RamterStudioLogo.png"
+cp "${ROOT}/THIRD-PARTY-NOTICES.txt" "${OUT}/Contents/Resources/THIRD-PARTY-NOTICES.txt"
 if [[ -f "${ROOT}/.build/checkouts/Sparkle/LICENSE" ]]; then
 	cp "${ROOT}/.build/checkouts/Sparkle/LICENSE" "${OUT}/Contents/Resources/Sparkle-LICENSE.txt"
 fi
@@ -70,6 +73,11 @@ PLIST="${OUT}/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${BUNDLE_ID}" "$PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" "$PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION}" "$PLIST"
+if [[ "${PERSONAL_BUILD:-0}" == "1" ]]; then
+    /usr/libexec/PlistBuddy -c "Add :CodexVitalsPersonalBuild bool true" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Set :SUAutomaticallyUpdate false" "$PLIST"
+fi
+
 
 if command -v codesign &>/dev/null; then
 	if [[ "$SIGN_IDENTITY" == "-" ]]; then

@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import SwiftUI
 
 private let statusBarSymbolNames = [
@@ -50,7 +51,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: - Popover
 
     private func setupPopover() {
-        let root = ContentView(viewModel: viewModel, appUpdater: appUpdater)
+        let root = ContentView(
+            viewModel: viewModel,
+            appUpdater: appUpdater
+        )
         let controller = NSHostingController(rootView: root)
         controller.preferredContentSize = Self.preferredContentSize
         if #available(macOS 13.0, *) {
@@ -122,6 +126,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
 MainActor.assumeIsolated {
     let app = NSApplication.shared
+#if DEBUG
+    if CommandLine.arguments.contains("--render-sanitized-screenshot") {
+        app.setActivationPolicy(.prohibited)
+        do {
+            try SanitizedScreenshotRenderer.render()
+            Darwin.exit(EXIT_SUCCESS)
+        } catch {
+            fputs("Failed to render sanitized screenshot: \(error)\n", stderr)
+            Darwin.exit(EXIT_FAILURE)
+        }
+    }
+#endif
     let delegate = AppDelegate()
     app.delegate = delegate
     app.setActivationPolicy(.accessory)   // hide from Dock

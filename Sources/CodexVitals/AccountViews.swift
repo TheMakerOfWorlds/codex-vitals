@@ -41,6 +41,32 @@ private enum WorkspaceAliasPrompt {
     }
 }
 
+private enum PlanRenewalDatePrompt {
+    static func edit(account: Account, save: (Date?) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = account.planRenewalDate == nil
+            ? "Set Plan Renewal Date"
+            : "Edit Plan Renewal Date"
+        alert.informativeText = "Enter the next billing date shown by your Claude subscription."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+
+        let picker = NSDatePicker(frame: NSRect(x: 0, y: 0, width: 180, height: 24))
+        picker.datePickerStyle = .textFieldAndStepper
+        picker.datePickerElements = .yearMonthDay
+        picker.minDate = Calendar.current.startOfDay(for: Date())
+        picker.dateValue = account.planRenewalDate
+            ?? Calendar.current.date(byAdding: .month, value: 1, to: Date())
+            ?? Date()
+        alert.accessoryView = picker
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            save(picker.dateValue)
+        }
+    }
+}
+
 struct AccountListView: View {
     @ObservedObject var vm: UsageViewModel
 
@@ -50,137 +76,265 @@ struct AccountListView: View {
 
     @ViewBuilder
     private var listBody: some View {
-        VStack(spacing: 0) {
-            if vm.groupByWorkspace {
-                if !vm.priorityAccounts.isEmpty {
-                    PrioritySeparatorHeader(count: vm.priorityAccounts.count)
-                    ForEach(vm.groupedPriorityAccounts, id: \.0) { ws, accs in
-                        SectionHeader(
-                            originalName: ws,
-                            displayName: vm.workspaceDisplayName(for: ws),
-                            count: accs.count,
-                            hasAlias: vm.workspaceHasDisplayAlias(ws),
-                            setAlias: { vm.setWorkspaceAlias($0, for: ws) }
-                        )
-                        rows(accs)
-                    }
-                }
-                if !vm.normalActiveAccounts.isEmpty {
-                    ForEach(vm.groupedNormalActiveAccounts, id: \.0) { ws, accs in
-                        SectionHeader(
-                            originalName: ws,
-                            displayName: vm.workspaceDisplayName(for: ws),
-                            count: accs.count,
-                            hasAlias: vm.workspaceHasDisplayAlias(ws),
-                            setAlias: { vm.setWorkspaceAlias($0, for: ws) }
-                        )
-                        rows(accs)
-                    }
-                }
-                if !vm.exhaustedAccounts.isEmpty {
-                    waitingForResetGroup {
-                        ForEach(vm.groupedExhaustedAccounts, id: \.0) { ws, accs in
-                            SectionHeader(
-                                originalName: ws,
-                                displayName: vm.workspaceDisplayName(for: ws),
-                                count: accs.count,
-                                hasAlias: vm.workspaceHasDisplayAlias(ws),
-                                setAlias: { vm.setWorkspaceAlias($0, for: ws) }
-                            )
-                            rows(accs)
-                        }
-                        freeWaitingGroup
-                    }
-                }
-            } else {
-                if !vm.priorityAccounts.isEmpty {
-                    PrioritySeparatorHeader(count: vm.priorityAccounts.count)
-                    rows(vm.priorityAccounts)
-                }
-                if !vm.normalActiveAccounts.isEmpty {
-                    rows(vm.normalActiveAccounts)
-                }
-                if !vm.exhaustedAccounts.isEmpty {
-                    waitingForResetGroup {
-                        rows(vm.nonFreeExhaustedAccounts)
-                        freeWaitingGroup
-                    }
-                }
+        VStack(spacing: 4) {
+            ForEach(providerSections, id: \.provider) { section in
+                providerSection(section.provider, accountCount: section.accounts.count)
             }
         }
         .padding(.vertical, 4)
     }
 
+    private var displayedAccounts: [Account] {
+        vm.priorityAccounts
+            + vm.normalActiveAccounts
+            + vm.nonFreeExhaustedAccounts
+            + vm.freeWaitingAccounts
+    }
+
+    private var providerSections: [(provider: AccountProvider, accounts: [Account])] {
+        UsageViewModel.groupByProvider(displayedAccounts)
+    }
+
     @ViewBuilder
-    private func waitingForResetGroup<Content: View>(
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        let isCollapsed = vm.waitingForResetCollapsed && vm.searchText.isEmpty
-        ExhaustedSeparatorHeader(
-            count: vm.exhaustedAccounts.count,
-            isCollapsed: isCollapsed,
-            toggle: { vm.toggleWaitingForResetCollapsed() }
-        )
-        if !isCollapsed {
-            content()
+    private func providerSection(_ provider: AccountProvider, accountCount: Int) -> some View {
+        VStack(spacing: 0) {
+            ProviderSectionHeader(provider: provider, count: accountCount)
+            if vm.groupByWorkspace {
+                groupedProviderContent(provider)
+            } else {
+                flatProviderContent(provider)
+            }
+        }
+        .background(Theme.providerSectionSurface(for: provider))
+    }
+
+    @ViewBuilder
+    private func flatProviderContent(_ provider: AccountProvider) -> some View {
+        let priority = providerAccounts(vm.priorityAccounts, provider: provider)
+        let active = providerAccounts(vm.normalActiveAccounts, provider: provider)
+        let exhausted = providerAccounts(vm.exhaustedAccounts, provider: provider)
+
+        if !priority.isEmpty {
+            PrioritySeparatorHeader(count: priority.count)
+            rows(priority)
+        }
+        if !active.isEmpty {
+            rows(active)
+        }
+        if !exhausted.isEmpty {
+            waitingForResetGroup(count: exhausted.count) {
+                rows(providerAccounts(vm.nonFreeExhaustedAccounts, provider: provider))
+                freeWaitingGroup(provider)
+            }
         }
     }
 
     @ViewBuilder
-    private var freeWaitingGroup: some View {
-        if !vm.freeWaitingAccounts.isEmpty {
+    private func groupedProviderContent(_ provider: AccountProvider) -> some View {
+        let priority = providerAccounts(vm.priorityAccounts, provider: provider)
+        let active = providerAccounts(vm.normalActiveAccounts, provider: provider)
+        let exhausted = providerAccounts(vm.exhaustedAccounts, provider: provider)
+
+        if !priority.isEmpty {
+            PrioritySeparatorHeader(count: priority.count)
+            workspaceGroups(providerGroups(vm.groupedPriorityAccounts, provider: provider), provider: provider)
+        }
+        if !active.isEmpty {
+            workspaceGroups(providerGroups(vm.groupedNormalActiveAccounts, provider: provider), provider: provider)
+        }
+        if !exhausted.isEmpty {
+            waitingForResetGroup(count: exhausted.count) {
+                workspaceGroups(providerGroups(vm.groupedExhaustedAccounts, provider: provider), provider: provider)
+                freeWaitingGroup(provider)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func workspaceGroups(
+        _ groups: [(String, [Account])],
+        provider: AccountProvider
+    ) -> some View {
+        ForEach(groups, id: \.0) { ws, accs in
+            SectionHeader(
+                originalName: ws,
+                displayName: vm.workspaceDisplayName(for: ws, provider: provider),
+                count: accs.count,
+                hasAlias: vm.workspaceHasDisplayAlias(ws, provider: provider),
+                setAlias: { vm.setWorkspaceAlias($0, for: ws, provider: provider) }
+            )
+            rows(accs)
+        }
+    }
+
+    private func providerAccounts(_ accounts: [Account], provider: AccountProvider) -> [Account] {
+        accounts.filter { $0.accountProvider == provider }
+    }
+
+    private func providerGroups(
+        _ groups: [(String, [Account])],
+        provider: AccountProvider
+    ) -> [(String, [Account])] {
+        groups.compactMap { workspace, accounts in
+            let filtered = providerAccounts(accounts, provider: provider)
+            return filtered.isEmpty ? nil : (workspace, filtered)
+        }
+    }
+
+    @ViewBuilder
+    private func waitingForResetGroup<Content: View>(
+        count: Int,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let isCollapsed = vm.waitingForResetCollapsed && vm.searchText.isEmpty
+        VStack(spacing: 0) {
+            ExhaustedSeparatorHeader(
+                count: count,
+                isCollapsed: isCollapsed,
+                toggle: { vm.toggleWaitingForResetCollapsed() }
+            )
+            if !isCollapsed {
+                content()
+            }
+        }
+        .opacity(0.8)
+    }
+
+    @ViewBuilder
+    private func freeWaitingGroup(_ provider: AccountProvider) -> some View {
+        let accounts = providerAccounts(vm.freeWaitingAccounts, provider: provider)
+        if !accounts.isEmpty {
             let isCollapsed = vm.freeWaitingCollapsed && vm.searchText.isEmpty
             FreeWaitingGroupHeader(
-                count: vm.freeWaitingAccounts.count,
+                count: accounts.count,
                 isCollapsed: isCollapsed,
                 toggle: { vm.toggleFreeWaitingCollapsed() }
             )
             if !isCollapsed {
-                rows(vm.freeWaitingAccounts)
+                rows(accounts)
             }
         }
     }
 
     @ViewBuilder
     private func rows(_ accs: [Account]) -> some View {
-        ForEach(Array(accs.enumerated()), id: \.element.id) { i, acc in
+        ForEach(accs, id: \.id) { acc in
             accountRow(for: acc)
-            if i < accs.count - 1 {
-                Rectangle()
-                    .fill(Theme.listDivider)
-                    .frame(height: 0.5)
-                    .padding(.horizontal, 10)
-            }
         }
     }
 
     @ViewBuilder
     private func accountRow(for acc: Account) -> some View {
-        AccountCompactRow(
-            account: acc,
-            needsRelogin: vm.needsRelogin(acc),
-            isRelogging: vm.isRelogging(acc),
-            isReloginBlocked: vm.hasPendingAccountAction && !vm.isRelogging(acc),
-            isSwitchingToCodex: vm.isSwitchingToCodex(acc),
-            isActiveInCodex: vm.isActiveInCodex(acc),
-            showsCodexControls: vm.isCodexInstalled,
-            isSwitchBlocked: vm.hasPendingAccountAction && !vm.isSwitchingToCodex(acc),
-            isRemoving: vm.isRemoving(acc),
-            isRemoveBlocked: vm.hasPendingAccountAction && !vm.isRemoving(acc),
-            canMoveUp: vm.canMoveAccount(acc, direction: .up),
-            canMoveDown: vm.canMoveAccount(acc, direction: .down),
-            relogin: { vm.relogin(acc) },
-            cancelRelogin: { vm.cancelRelogin() },
-            switchToCodex: { vm.switchCodex(to: acc) },
-            removeAccount: { vm.removeAccount(acc) },
-            setAlias: { vm.setAlias($0, for: acc) },
-            moveUp: { vm.moveAccount(acc, direction: .up) },
-            moveDown: { vm.moveAccount(acc, direction: .down) }
-        )
+        ReorderableAccountRow(account: acc, viewModel: vm) {
+            AccountCompactRow(
+                account: acc,
+                needsRelogin: vm.needsRelogin(acc),
+                isRelogging: vm.isRelogging(acc),
+                isReloginBlocked: vm.hasPendingAccountAction && !vm.isRelogging(acc),
+                isSwitchingAccount: vm.isSwitchingAccount(acc),
+                isActiveAccount: vm.isActiveAccount(acc),
+                showsSwitchControls: vm.showsSwitchControls(for: acc),
+                canSwitchAccount: vm.canSwitchAccount(acc),
+                isSwitchBlocked: vm.hasPendingAccountAction && !vm.isSwitchingAccount(acc),
+                isRemoving: vm.isRemoving(acc),
+                isRemoveBlocked: vm.hasPendingAccountAction && !vm.isRemoving(acc),
+                allowsRemoval: true,
+                allowsAlias: true,
+                allowsReordering: vm.canReorderAccount(acc),
+                relogin: { vm.relogin(acc) },
+                cancelRelogin: { vm.cancelRelogin() },
+                switchAccount: { vm.switchAccount(to: acc) },
+                removeAccount: { vm.removeAccount(acc) },
+                setAlias: { vm.setAlias($0, for: acc) },
+                setPlanRenewalDate: { vm.setPlanRenewalDate($0, for: acc) }
+            )
+        }
+    }
+}
+
+private struct ReorderableAccountRow<Content: View>: View {
+    let account: Account
+    @ObservedObject var viewModel: UsageViewModel
+    let content: Content
+    @State private var isDropTarget = false
+
+    init(
+        account: Account,
+        viewModel: UsageViewModel,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.account = account
+        self.viewModel = viewModel
+        self.content = content()
+    }
+
+    @ViewBuilder
+    var body: some View {
+        if viewModel.canReorderAccount(account) {
+            content
+                .draggable(account.id) {
+                    dragPreview
+                }
+                .dropDestination(for: String.self) { accountIDs, location in
+                    guard let draggedAccountID = accountIDs.first else { return false }
+                    return viewModel.reorderAccount(
+                        draggedAccountID: draggedAccountID,
+                        targetAccountID: account.id,
+                        placeAfterTarget: location.y > rowHeight / 2
+                    )
+                } isTargeted: { isTargeted in
+                    isDropTarget = isTargeted
+                }
+                .background {
+                    RoundedRectangle(cornerRadius: Theme.rowCornerRadius)
+                        .fill(Theme.controlSelectedSurface.opacity(isDropTarget ? 1 : 0))
+                        .padding(.horizontal, 4)
+                }
+                .animation(.easeOut(duration: 0.12), value: isDropTarget)
+        } else {
+            content
+        }
+    }
+
+    private var rowHeight: CGFloat {
+        CompactRowLayout.rowHeight(for: account)
+    }
+
+    private var dragPreview: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal")
+                .foregroundStyle(Theme.brandAccent)
+            Text(account.displayName)
+                .font(Theme.accountTitleFont)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 32)
+        .background(Theme.settingsGroupSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
 // MARK: - Section Headers
+
+struct ProviderSectionHeader: View {
+    let provider: AccountProvider
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(provider.displayName)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text("\(count)")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.tertiary)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 30)
+    }
+}
 
 struct SectionHeader: View {
     let originalName: String
@@ -192,7 +346,7 @@ struct SectionHeader: View {
     var body: some View {
         HStack {
             Text("\(displayName.uppercased()) (\(count))")
-                .font(.system(size: 11, weight: .semibold))
+                .font(Theme.sectionTitleFont)
                 .foregroundColor(.secondary)
             Spacer()
         }
@@ -223,13 +377,12 @@ struct PrioritySeparatorHeader: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "flame.fill")
+            Image(systemName: "clock")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(Theme.warningText)
-            Text("PRIORITY (\(count))")
+            Text("Reset soon · \(count)")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(.secondary)
-                .textCase(.uppercase)
             Spacer()
         }
         .padding(.horizontal, 12)
@@ -249,18 +402,13 @@ struct ExhaustedSeparatorHeader: View {
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundColor(.secondary)
                     .frame(width: 10)
-                Image(systemName: "clock")
+                Text("Waiting for reset · \(count)")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.secondary)
-                Text("WAITING FOR RESET (\(count))")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.secondary)
-                    .textCase(.uppercase)
-                Spacer()
+                    Spacer()
             }
             .padding(.horizontal, 12)
             .frame(height: 27)
-            .background(Theme.sectionSurface)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -280,15 +428,13 @@ struct FreeWaitingGroupHeader: View {
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundColor(.secondary)
                     .frame(width: 10)
-                Text("FREE (\(count))")
+                Text("Free · \(count)")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.secondary)
-                    .textCase(.uppercase)
-                Spacer()
+                    Spacer()
             }
             .padding(.horizontal, 12)
             .frame(height: 27)
-            .background(Theme.sectionSurface.opacity(0.8))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -301,10 +447,6 @@ struct FreeWaitingGroupHeader: View {
 struct AccountRow: View {
     let account: Account
     var setAlias: (String?) -> Void = { _ in }
-    var canMoveUp = false
-    var canMoveDown = false
-    var moveUp: () -> Void = {}
-    var moveDown: () -> Void = {}
     @State private var hovered = false
 
     private var exhausted: Bool { account.isWeeklyExhausted }
@@ -342,15 +484,6 @@ struct AccountRow: View {
         .background(hovered ? Color.primary.opacity(0.06) : .clear)
         .onHover { hovered = $0 }
         .contextMenu {
-            Button("Move Up") {
-                moveUp()
-            }
-            .disabled(!canMoveUp)
-            Button("Move Down") {
-                moveDown()
-            }
-            .disabled(!canMoveDown)
-            Divider()
             Button(account.hasDisplayAlias ? "Edit Alias..." : "Set Alias...") {
                 AccountAliasPrompt.edit(account: account, save: setAlias)
             }
@@ -377,6 +510,8 @@ struct AccountRow: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.primary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .allowsTightening(true)
                         .truncationMode(.tail)
                 }
                 Text(account.email)
@@ -400,53 +535,49 @@ struct AccountRow: View {
 
 // MARK: - Compact Row
 
-private enum CompactRowLayout {
-    static let horizontalPadding: CGFloat = 12
-    static let emailMinWidth: CGFloat = 176
-    static let actionWidth: CGFloat = 24
+enum CompactRowLayout {
+    static let horizontalPadding: CGFloat = 16
+    static let actionWidth: CGFloat = 62
+    static let bankedResetWidth: CGFloat = 180
 
     struct Metrics {
         let spacing: CGFloat
         let emailWidth: CGFloat
-        let workspaceWidth: CGFloat
         let metricWidth: CGFloat
         let sessionResetWidth: CGFloat
         let weeklyResetWidth: CGFloat
         let quotaAreaWidth: CGFloat
         let planCycleWidth: CGFloat
         let actionWidth: CGFloat
+        let bankedResetWidth: CGFloat
     }
 
-    static func metrics(totalWidth: CGFloat) -> Metrics {
-        let spacing: CGFloat = 3
-        let contentWidth = max(0, totalWidth - horizontalPadding * 2)
-        let workspaceWidth: CGFloat = 58
-        let metricWidth: CGFloat = 84
-        let sessionResetWidth: CGFloat = 42
-        let weeklyResetWidth: CGFloat = 56
-        let planCycleWidth: CGFloat = 34
-        let quotaAreaWidth = metricWidth * 2
-            + weeklyResetWidth * 2
-            + spacing
-            + 4
-        let fixedWidth = 16
-            + workspaceWidth
-            + actionWidth
-            + quotaAreaWidth
-            + planCycleWidth
-            + spacing * 5
-
+    static func metrics(totalWidth: CGFloat, includesBankedResets: Bool) -> Metrics {
+        let spacing: CGFloat = 12
+        let quotaAreaWidth: CGFloat = 212
+        let planCycleWidth: CGFloat = 80
+        let resetWidth: CGFloat = 82
+        let fixedWidth = horizontalPadding * 2 + actionWidth + quotaAreaWidth
+            + planCycleWidth + (includesBankedResets ? bankedResetWidth + spacing : 0)
+            + spacing * 3
         return Metrics(
             spacing: spacing,
-            emailWidth: max(emailMinWidth, contentWidth - fixedWidth),
-            workspaceWidth: workspaceWidth,
-            metricWidth: metricWidth,
-            sessionResetWidth: sessionResetWidth,
-            weeklyResetWidth: weeklyResetWidth,
+            emailWidth: max(140, totalWidth - fixedWidth),
+            metricWidth: quotaAreaWidth - resetWidth - 4,
+            sessionResetWidth: resetWidth,
+            weeklyResetWidth: resetWidth,
             quotaAreaWidth: quotaAreaWidth,
             planCycleWidth: planCycleWidth,
-            actionWidth: actionWidth
+            actionWidth: actionWidth,
+            bankedResetWidth: bankedResetWidth
         )
+    }
+
+    static func rowHeight(for account: Account) -> CGFloat {
+        let baseHeight: CGFloat = account.fableQuotaWindow == nil ? 66 : 88
+        let knownCount = min(max(0, account.availableResetCount ?? 0), account.bankedResetExpirations?.count ?? 0)
+        let missing = knownCount < (account.availableResetCount ?? 0)
+        return max(baseHeight, 38 + CGFloat(knownCount + (missing ? 1 : 0)) * 14)
     }
 }
 
@@ -455,64 +586,59 @@ struct AccountCompactRow: View {
     let needsRelogin: Bool
     let isRelogging: Bool
     let isReloginBlocked: Bool
-    let isSwitchingToCodex: Bool
-    let isActiveInCodex: Bool
-    let showsCodexControls: Bool
+    let isSwitchingAccount: Bool
+    let isActiveAccount: Bool
+    let showsSwitchControls: Bool
+    let canSwitchAccount: Bool
     let isSwitchBlocked: Bool
     let isRemoving: Bool
     let isRemoveBlocked: Bool
-    let canMoveUp: Bool
-    let canMoveDown: Bool
+    let allowsRemoval: Bool
+    let allowsAlias: Bool
+    let allowsReordering: Bool
     let relogin: () -> Void
     let cancelRelogin: () -> Void
-    let switchToCodex: () -> Void
+    let switchAccount: () -> Void
     let removeAccount: () -> Void
     let setAlias: (String?) -> Void
-    let moveUp: () -> Void
-    let moveDown: () -> Void
+    let setPlanRenewalDate: (Date?) -> Void
     @State private var hovered = false
     @State private var isShowingRemovalConfirmation = false
 
     private var exhausted: Bool { account.isWeeklyExhausted }
     private var rowHeight: CGFloat {
-        account.hasDisplayAlias ? 40 : 34
+        CompactRowLayout.rowHeight(for: account)
     }
     private var canShowSwapControl: Bool {
-        showsCodexControls
-            && !isActiveInCodex
+        showsSwitchControls
+            && canSwitchAccount
+            && !isActiveAccount
             && !needsRelogin
             && !isRelogging
-            && account.isUsableForCodex
+    }
+    private var isUsingCachedClaudeUsage: Bool {
+        account.isClaudeAccount && account.providerStatus == ClaudeAccountStatus.cached.rawValue
     }
 
     private var rowBackgroundColor: Color {
-        if isActiveInCodex {
+        if isActiveAccount {
             return Theme.activeRowSurface.opacity(hovered ? 1 : 0.78)
         }
         return hovered ? Theme.rowHoverSurface : .clear
     }
 
-    private var rowBorderColor: Color {
-        if isActiveInCodex {
-            return Theme.activeRowBorder
-        }
-        return hovered ? Theme.rowHoverBorder : .clear
-    }
-
     var body: some View {
         GeometryReader { proxy in
-            let layout = CompactRowLayout.metrics(totalWidth: proxy.size.width)
+            let layout = CompactRowLayout.metrics(
+                totalWidth: proxy.size.width,
+                includesBankedResets: true
+            )
             let freeResetWidth = layout.quotaAreaWidth
                 + layout.planCycleWidth
                 + layout.spacing
             HStack(alignment: .center, spacing: layout.spacing) {
-                leadingAccountControl
-
                 accountIdentityView
                     .frame(width: layout.emailWidth, alignment: .leading)
-
-                WorkspaceChip(ws: account.displayWorkspaceName, colorKey: account.workspace, compact: true)
-                    .frame(width: layout.workspaceWidth, alignment: .leading)
 
                 if needsRelogin || isRelogging {
                     accountActionControl(width: layout.actionWidth)
@@ -522,9 +648,15 @@ struct AccountCompactRow: View {
                     freeResetStatus(width: freeResetWidth, alignment: .leading)
                 } else {
                     accountActionControl(width: layout.actionWidth)
+                    usageMetrics(layout: layout)
+                }
 
-                    quotaMetrics(layout: layout)
-                    planCycleText(width: layout.planCycleWidth)
+                if !account.isClaudeAccount {
+                    BankedResetListView(
+                        count: account.availableResetCount,
+                        expirations: account.bankedResetExpirations,
+                        width: layout.bankedResetWidth
+                    )
                 }
             }
             .padding(.horizontal, CompactRowLayout.horizontalPadding)
@@ -539,51 +671,48 @@ struct AccountCompactRow: View {
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
         }
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.rowCornerRadius, style: .continuous)
-                .stroke(rowBorderColor, lineWidth: 0.5)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-        }
-        .overlay(alignment: .leading) {
-            if isActiveInCodex {
-                Capsule()
-                    .fill(Theme.healthyAccent)
-                    .frame(width: 2.5, height: max(14, rowHeight - 12))
-                    .padding(.leading, 6)
-            }
-        }
         .contentShape(Rectangle())
         .onHover { hovered = $0 }
         .animation(.easeOut(duration: 0.12), value: hovered)
         .contextMenu {
-            Button("Move Up") {
-                moveUp()
-            }
-            .disabled(!canMoveUp)
-            Button("Move Down") {
-                moveDown()
-            }
-            .disabled(!canMoveDown)
-            Divider()
-            Button(account.hasDisplayAlias ? "Edit Alias..." : "Set Alias...") {
-                AccountAliasPrompt.edit(account: account, save: setAlias)
-            }
-            if account.hasDisplayAlias {
-                Button("Clear Alias") {
-                    setAlias(nil)
+            if allowsAlias {
+                Button(account.hasDisplayAlias ? "Edit Alias..." : "Set Alias...") {
+                    AccountAliasPrompt.edit(account: account, save: setAlias)
                 }
+                if account.hasDisplayAlias {
+                    Button("Clear Alias") {
+                        setAlias(nil)
+                    }
+                }
+                Divider()
             }
-            Divider()
+            if account.isClaudeAccount {
+                Button(account.planRenewalDate == nil
+                    ? "Set Plan Renewal Date..."
+                    : "Edit Plan Renewal Date...") {
+                    PlanRenewalDatePrompt.edit(
+                        account: account,
+                        save: setPlanRenewalDate
+                    )
+                }
+                if account.planRenewalDate != nil {
+                    Button("Clear Plan Renewal Date") {
+                        setPlanRenewalDate(nil)
+                    }
+                }
+                Divider()
+            }
             Button("Copy email") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(account.email, forType: .string)
             }
-            Divider()
-            Button("Remove Account...", role: .destructive) {
-                isShowingRemovalConfirmation = true
+            if allowsRemoval {
+                Divider()
+                Button("Remove Account...", role: .destructive) {
+                    isShowingRemovalConfirmation = true
+                }
+                .disabled(isRemoveBlocked)
             }
-            .disabled(isRemoveBlocked)
         }
         .alert("Remove this account?", isPresented: $isShowingRemovalConfirmation) {
             Button("Cancel", role: .cancel) {}
@@ -591,86 +720,94 @@ struct AccountCompactRow: View {
                 removeAccount()
             }
         } message: {
-            Text("\(account.email) will be removed from Codex Vitals. A local backup is created before its saved profile is deleted.")
+            Text(removalConfirmationMessage)
         }
     }
 
-    @ViewBuilder
+    private var removalConfirmationMessage: String {
+        if account.isClaudeAccount {
+            if isActiveAccount {
+                return "\(account.email) will be hidden from Codex Vitals. Claude Code stays signed in."
+            }
+            return "\(account.email) will be removed from Codex Vitals. The active Claude Code account is unchanged."
+        }
+        return "\(account.email) will be removed from Codex Vitals. A local backup is created before its saved profile is deleted."
+    }
+
     private var accountIdentityView: some View {
-        if account.hasDisplayAlias {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 4) {
-                    PlanBadge(text: account.displayPlanName, compact: true)
-                    Text(account.displayName)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                if isActiveAccount {
+                    Circle().fill(Theme.healthyAccent).frame(width: 5, height: 5)
+                        .accessibilityLabel("Active account")
                 }
                 Text(account.email)
-                    .font(.system(size: 9.5))
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 12, weight: isActiveAccount ? .semibold : .medium))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            .help(account.email)
-        } else {
-            HStack(spacing: 5) {
-                Text(account.email)
-                    .font(.system(size: 11))
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+            HStack(spacing: 6) {
                 PlanBadge(text: account.displayPlanName, compact: true)
-            }
-            .help(account.email)
-        }
-    }
-
-    @ViewBuilder
-    private var leadingAccountControl: some View {
-        Group {
-            if showsCodexControls && isActiveInCodex {
-                CodexIconView()
-                    .overlay(alignment: .bottomTrailing) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 7, weight: .bold))
-                            .foregroundColor(Theme.healthyAccent)
-                            .background(Circle().fill(.black.opacity(0.72)))
-                    }
-                    .help("Active in Codex")
-            } else if isRemoving {
-                ProgressView()
-                    .controlSize(.mini)
-                    .scaleEffect(0.6)
-            } else if hovered {
-                Button {
-                    isShowingRemovalConfirmation = true
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.secondary)
-                        .frame(width: 14, height: 14)
+                if let alias = account.displayAlias {
+                    Text(alias).lineLimit(1)
                 }
-                .buttonStyle(.plain)
-                .disabled(isRemoveBlocked)
-                .help("Remove from list")
-                .accessibilityLabel("Remove \(account.email)")
-            } else {
-                Color.clear.frame(width: 5, height: 5)
+                if let workspace = account.secondaryWorkspaceName {
+                    Text(workspace).lineLimit(1)
+                }
+                if isUsingCachedClaudeUsage { cachedUsageIndicator }
+                if hovered && allowsReordering {
+                    Image(systemName: "line.3.horizontal")
+                        .help("Drag to reorder")
+                }
             }
+            .font(.system(size: 10, weight: .regular))
+            .foregroundStyle(.secondary)
         }
-        .frame(width: 16, height: 18)
+        .help("\(account.email)\n\(account.displayName)\nWorkspace: \(account.displayWorkspaceName)")
     }
 
     private func quotaMetrics(layout: CompactRowLayout.Metrics) -> some View {
-        HStack(spacing: layout.spacing) {
-            Spacer(minLength: 0)
+        VStack(spacing: 4) {
             ForEach(Array(account.usageWindows.prefix(2).enumerated()), id: \.offset) { _, window in
                 quotaMetricGroup(window, layout: layout)
             }
+            if let window = account.fableQuotaWindow {
+                fableQuotaMetric(window, layout: layout, width: layout.quotaAreaWidth)
+            }
         }
-        .frame(width: layout.quotaAreaWidth, alignment: .trailing)
+        .frame(width: layout.quotaAreaWidth, alignment: .leading)
+    }
+
+    private func usageMetrics(layout: CompactRowLayout.Metrics) -> some View {
+        HStack(spacing: layout.spacing) {
+            quotaMetrics(layout: layout)
+            planCycleText(width: layout.planCycleWidth)
+        }
+    }
+
+    private func fableQuotaMetric(
+        _ window: QuotaWindow,
+        layout: CompactRowLayout.Metrics,
+        width: CGFloat
+    ) -> some View {
+        let dimmed = window.isExhausted
+        let meterWidth = width - layout.weeklyResetWidth - 2
+        return HStack(spacing: 2) {
+            FableQuotaMeter(
+                pct: window.remainingPercent,
+                dimmed: dimmed,
+                width: meterWidth
+            )
+            ResetTimeBadge(
+                text: ResetFormatter.compact(seconds: window.resetAfterSeconds),
+                color: .secondary,
+                width: layout.weeklyResetWidth,
+                help: ResetFormatter.fullTooltip(seconds: window.resetAfterSeconds)
+            )
+        }
+        .frame(width: width, alignment: .trailing)
+        .opacity(dimmed ? 0.76 : 1)
     }
 
     private func quotaMetricGroup(
@@ -708,8 +845,8 @@ struct AccountCompactRow: View {
             text: text,
             color: color,
             width: width,
-            help: ResetFormatter.fullTooltip(seconds: window.resetAfterSeconds),
-            systemImage: urgent ? "clock" : nil
+            help: "\(window.label) quota resets \(ResetFormatter.fullTooltip(seconds: window.resetAfterSeconds))",
+            systemImage: "clock.arrow.circlepath"
         )
         .opacity(dimmed ? 0.76 : 1)
     }
@@ -717,13 +854,27 @@ struct AccountCompactRow: View {
     @ViewBuilder
     private func planCycleText(width: CGFloat) -> some View {
         Group {
-            if let text = PlanCycleFormatter.daysText(for: account),
-               let date = account.planRenewalDate {
-                PlanCycleBadge(text: text, width: width, help: PlanCycleFormatter.tooltip(for: date))
+            if let date = account.planRenewalDate {
+                VStack(alignment: .leading, spacing: 5) {
+                    Label(account.planCycleLabel, systemImage: account.planCycleSymbol)
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text(PlanCycleFormatter.relativeText(for: date))
+                        .font(.system(size: 11, weight: .medium))
+                        .monospacedDigit()
+                }
+                .help(PlanCycleFormatter.tooltip(for: date, label: account.planCycleLabel))
+                .accessibilityElement(children: .combine)
             } else {
-                Color.clear.frame(width: width, height: 1)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Renewal").font(.system(size: 9.5))
+                    Text("—").font(.system(size: 11))
+                }
+                .foregroundStyle(.tertiary)
+                .help("Subscription renewal date unavailable")
             }
         }
+        .frame(width: width, alignment: .leading)
     }
 
     @ViewBuilder
@@ -738,20 +889,83 @@ struct AccountCompactRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Cancel")
-            } else if isSwitchingToCodex {
+            } else if isSwitchingAccount {
                 ProgressView()
                     .controlSize(.mini)
                     .scaleEffect(0.65)
             } else if canShowSwapControl {
-                SwitchAccountButton(action: switchToCodex)
+                SwitchAccountButton(
+                    action: switchAccount,
+                    helpText: "Switch to this account in \(account.accountProvider.displayName). This does not use a banked reset."
+                )
                     .disabled(isSwitchBlocked)
-                    .opacity(hovered ? 1 : 0)
-                    .allowsHitTesting(hovered)
+                    .opacity(isSwitchBlocked ? 0.35 : 1)
+            } else if isUsingCachedClaudeUsage {
+                cachedUsageIndicator
             } else {
                 Color.clear.frame(width: width, height: 1)
             }
         }
-        .frame(width: width, height: 18)
+        .frame(width: width, height: 28)
+    }
+
+    private var cachedUsageIndicator: some View {
+        Image(systemName: "clock.arrow.circlepath")
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.secondary)
+            .help("Showing the last successful Claude usage while refresh is paused")
+    }
+}
+
+struct BankedResetListView: View {
+    let count: Int?
+    let expirations: [Date]?
+    let width: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(BankedResetFormatter.compactCountLabel(count))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(count == nil || count == 0 ? Color.secondary : Color.primary)
+            if count == nil {
+                detailText("Temporarily unavailable")
+            } else if let count, count > 0 {
+                ForEach(Array(displayedExpirations.enumerated()), id: \.offset) { _, date in
+                    detailText("Expires \(BankedResetFormatter.compactExpiration(date))")
+                }
+                if missingExpirationCount > 0 {
+                    detailText(displayedExpirations.isEmpty ? "Expiration unavailable" : "+\(missingExpirationCount) expiration unknown")
+                }
+            }
+        }
+        .frame(width: width, alignment: .leading)
+        .help(accessibilityText)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var displayedExpirations: [Date] {
+        guard let count, count > 0, let expirations else { return [] }
+        return Array(expirations.sorted().prefix(count))
+    }
+
+    private var missingExpirationCount: Int {
+        max(0, (count ?? 0) - displayedExpirations.count)
+    }
+
+    private var accessibilityText: String {
+        let label = BankedResetFormatter.compactCountLabel(count)
+        let dates = displayedExpirations.map { BankedResetFormatter.expiration($0) }.joined(separator: "; ")
+        let missing = missingExpirationCount > 0 ? " Some expiration dates are unavailable." : ""
+        return "\(label). \(dates.isEmpty ? "" : "Expires: " + dates + ".")\(missing)"
+    }
+
+    private func detailText(_ value: String) -> some View {
+        Text(value)
+            .font(.system(size: 9.5))
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .lineLimit(1)
     }
 }
 
@@ -763,54 +977,20 @@ struct ResetTimeBadge: View {
     var systemImage: String? = nil
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 4) {
             if let systemImage {
                 Image(systemName: systemImage)
-                    .font(.system(size: 7.5, weight: .semibold))
+                    .font(.system(size: 9, weight: .semibold))
             }
             Text(text)
-                .font(.system(size: 9.5, weight: .medium))
+                .font(Theme.metadataFont)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
         }
         .foregroundStyle(color)
-        .padding(.horizontal, 4)
-        .frame(width: width, height: 18, alignment: .center)
-        .background {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Theme.metricSurface)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(Theme.metricBorder, lineWidth: 0.5)
-        }
+        .frame(width: width, height: 18, alignment: .leading)
         .help(help)
-    }
-}
-
-struct PlanCycleBadge: View {
-    let text: String
-    let width: CGFloat
-    let help: String
-
-    var body: some View {
-        Text(text.lowercased())
-            .font(.system(size: 9, weight: .bold))
-            .monospacedDigit()
-            .foregroundStyle(Theme.warningText)
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
-            .frame(width: width, height: 18, alignment: .center)
-            .background {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(Theme.warningSurface)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 5)
-                    .stroke(Theme.warningBorder, lineWidth: 0.5)
-            }
-            .help(help)
     }
 }
 
@@ -821,18 +1001,14 @@ struct PlanBadge: View {
     var body: some View {
         if let text {
             Text(text)
-                .font(.system(size: compact ? 8.5 : 9, weight: .semibold))
+                .font(.system(size: compact ? 9.5 : 10, weight: .semibold))
                 .foregroundStyle(Theme.workspaceTextColor(for: text))
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
                 .padding(.horizontal, compact ? 4 : 5)
-                .padding(.vertical, compact ? 1 : 1.5)
+                .frame(height: compact ? 17 : 18)
                 .background(Theme.workspaceColor(for: text))
-                .clipShape(Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(Theme.workspaceBorderColor(for: text), lineWidth: 0.5)
-                }
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .fixedSize(horizontal: true, vertical: false)
                 .help("Plan: \(text)")
         }
@@ -849,12 +1025,8 @@ struct ReloginAccountButton: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Theme.warningText.opacity(hovered ? 1 : 0.88))
                 .frame(width: 20, height: 18)
-            .background(hovered ? .thinMaterial : .ultraThinMaterial)
-            .clipShape(Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(Theme.warningText.opacity(hovered ? 0.36 : 0.22), lineWidth: 0.6)
-            }
+            .background(hovered ? Theme.controlHoverSurface : .clear)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.controlCornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
@@ -864,28 +1036,32 @@ struct ReloginAccountButton: View {
 
 struct SwitchAccountButton: View {
     let action: () -> Void
+    var helpText = "Switch account"
     @State private var hovered = false
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.primary.opacity(hovered ? 0.92 : 0.78))
-                .frame(width: 20, height: 18)
-                .background(hovered ? .thinMaterial : .ultraThinMaterial)
-                .clipShape(Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(Color.primary.opacity(hovered ? 0.26 : 0.14), lineWidth: 0.6)
-                }
+            HStack(spacing: 4) {
+                Text("Switch")
+                Image(systemName: "arrow.up.right").font(.system(size: 8, weight: .semibold))
+            }
+            .font(.system(size: 10.5, weight: .semibold))
+            .foregroundStyle(Theme.brandAccent)
+            .frame(width: CompactRowLayout.actionWidth, height: 28)
+            .background(hovered ? Theme.controlSelectedSurface : Theme.controlHoverSurface.opacity(0.5))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
-        .help("Use in Codex")
+        .help(helpText)
+        .accessibilityLabel("Switch account")
     }
 }
 
 struct CodexIconView: View {
+    var foregroundColor: Color = .primary.opacity(0.82)
+
     private static let image: NSImage = {
         let codexPNG = Bundle.main.url(forResource: "codex", withExtension: "png")
         let image = codexPNG.flatMap { NSImage(contentsOf: $0) }
@@ -899,8 +1075,59 @@ struct CodexIconView: View {
         Image(nsImage: Self.image)
             .resizable()
             .renderingMode(.template)
-            .foregroundStyle(.primary.opacity(0.82))
+            .foregroundStyle(foregroundColor)
             .frame(width: 16, height: 16)
+    }
+}
+
+struct ClaudeIconView: View {
+    var foregroundColor: Color = Theme.warningText.opacity(0.9)
+
+    private static let image: NSImage = {
+        let repositoryAsset = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Support/ClaudeSpark.png")
+        let candidates = [
+            Bundle.main.url(forResource: "ClaudeSpark", withExtension: "png"),
+            repositoryAsset
+        ]
+        let image = candidates.compactMap { url in
+            url.flatMap { NSImage(contentsOf: $0) }
+        }.first ?? NSImage(systemSymbolName: "asterisk", accessibilityDescription: "Claude")!
+        image.size = NSSize(width: 16, height: 16)
+        image.isTemplate = true
+        return image
+    }()
+
+    var body: some View {
+        Image(nsImage: Self.image)
+            .resizable()
+            .renderingMode(.template)
+            .foregroundStyle(foregroundColor)
+            .frame(width: 16, height: 16)
+    }
+}
+
+struct ProviderIconView: View {
+    let provider: AccountProvider
+    var usesProviderColor = false
+
+    var body: some View {
+        Group {
+            switch provider {
+            case .codex:
+                CodexIconView(
+                    foregroundColor: usesProviderColor
+                        ? Theme.providerText(for: provider)
+                        : .primary.opacity(0.82)
+                )
+            case .claude:
+                ClaudeIconView(
+                    foregroundColor: usesProviderColor
+                        ? Theme.providerText(for: provider)
+                        : Theme.warningText.opacity(0.9)
+                )
+            }
+        }
     }
 }
 
@@ -919,12 +1146,8 @@ private extension AccountCompactRow {
                 }
                 .padding(.horizontal, 7)
                 .frame(height: 20)
-                .background(.ultraThinMaterial)
+                .background(Theme.settingsGroupSurface)
                 .clipShape(Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(Color.primary.opacity(0.13), lineWidth: 0.6)
-                }
             } else {
                 Button(action: relogin) {
                     HStack(spacing: 4) {
@@ -938,10 +1161,6 @@ private extension AccountCompactRow {
                     .frame(height: 20)
                     .background(Theme.warningSurface)
                     .clipShape(Capsule())
-                    .overlay {
-                        Capsule()
-                            .stroke(Theme.warningBorder, lineWidth: 0.6)
-                    }
                 }
                 .buttonStyle(.plain)
                 .disabled(isReloginBlocked)
@@ -988,17 +1207,18 @@ struct QuotaMeter: View {
     var body: some View {
         HStack(spacing: 4) {
             Text(label)
-                .font(.system(size: 9, weight: .semibold))
+                .font(Theme.metadataFont)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(width: 13, alignment: .leading)
+                .minimumScaleFactor(0.65)
+                .allowsTightening(true)
+                .frame(width: 20, alignment: .leading)
 
             MeterTrack(pct: pct, fill: fill, height: 4, minimumFill: 2)
-                .frame(width: 26)
+                .frame(maxWidth: .infinity)
 
             Text(String(format: "%.0f%%", pct))
-                .font(.system(size: 10, weight: .semibold))
+                .font(Theme.metricFont)
                 .monospacedDigit()
                 .foregroundColor(dimmed ? .secondary : Theme.statusTextColor(for: pct))
                 .lineLimit(1)
@@ -1007,15 +1227,40 @@ struct QuotaMeter: View {
         }
         .padding(.horizontal, 4)
         .frame(width: width, height: 18, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(dimmed ? Theme.metricSurface.opacity(0.7) : Theme.metricSurface)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(Theme.metricBorder, lineWidth: 0.6)
-        }
         .opacity(dimmed ? 0.76 : 1)
+    }
+}
+
+struct FableQuotaMeter: View {
+    let pct: Double
+    let dimmed: Bool
+    let width: CGFloat
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("Fable")
+                .font(Theme.metadataFont)
+                .foregroundStyle(Theme.providerText(for: .claude))
+                .lineLimit(1)
+                .frame(width: 34, alignment: .leading)
+
+            MeterTrack(
+                pct: pct,
+                fill: dimmed ? Theme.weeklyExhaustedBar : Theme.barColor(for: pct),
+                height: 4,
+                minimumFill: 2
+            )
+            .frame(maxWidth: .infinity)
+
+            Text(String(format: "%.0f%%", pct))
+                .font(Theme.metricFont)
+                .monospacedDigit()
+                .foregroundStyle(dimmed ? .secondary : Theme.statusTextColor(for: pct))
+                .lineLimit(1)
+                .frame(width: 34, alignment: .trailing)
+        }
+        .frame(width: width, height: 18)
+        .help("Fable: \(String(format: "%.0f%%", pct)) remaining")
     }
 }
 
@@ -1065,7 +1310,7 @@ struct WorkspaceChip: View {
 
     var body: some View {
         Text(ws)
-            .font(.system(size: compact ? 9.5 : 11, weight: .medium))
+            .font(.system(size: compact ? 10 : 11, weight: .medium))
             .foregroundColor(Theme.workspaceTextColor(for: colorKey))
             .lineLimit(1)
             .truncationMode(.tail)
@@ -1073,10 +1318,7 @@ struct WorkspaceChip: View {
             .padding(.vertical, compact ? 1 : 2)
             .background(Theme.workspaceColor(for: colorKey))
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(Theme.workspaceBorderColor(for: colorKey), lineWidth: 0.5)
-            }
+            .help("Workspace: \(ws)")
     }
 }
 
@@ -1112,10 +1354,6 @@ struct BarRow: View {
                 .background {
                     RoundedRectangle(cornerRadius: 5)
                         .fill(dimmed ? Theme.metricSurface.opacity(0.7) : Theme.metricSurface)
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 5)
-                        .stroke(Theme.metricBorder, lineWidth: 0.5)
                 }
             .opacity(dimmed ? 0.5 : 1)
 

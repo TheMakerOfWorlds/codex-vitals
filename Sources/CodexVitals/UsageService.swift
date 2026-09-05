@@ -1,19 +1,28 @@
 import Foundation
 
+struct BankedResetAvailability: Equatable, Sendable {
+    let count: Int
+    /// Known expiration instants for available credits. `nil` means only the count was returned.
+    let expirations: [Date]?
+}
+
 /// Fetches best-effort Codex usage data from chatgpt.com.
-final class UsageService: Sendable {
+final class UsageService: @unchecked Sendable {
 
     private let ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                    + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     private let refreshedAccessTokenKey = "__codex_switchboard_access_token"
     private let metadataCache = AccountMetadataCache()
+    private let tokenRefreshService: CodexTokenRefreshService
     private static let maxConcurrentRequests = 4
     private static let metadataCacheTTL: TimeInterval = 6 * 60 * 60
-    private static let refreshFailedError = "Refresh failed - re-login required"
+    private static let refreshFailedError = CodexTokenRefreshService.reloginRequiredMessage
+    private static let resetCreditRetryDelays: [UInt64] = [750_000_000, 1_500_000_000]
 
     private struct AccountMetadata: Sendable {
         let workspaceName: String?
         let planRenewalDate: Date?
+        let planCycleKind: PlanCycleKind?
     }
 
     private actor AccountMetadataCache {
@@ -36,6 +45,10 @@ final class UsageService: Sendable {
         func store(_ value: [String: AccountMetadata], for token: String, fetchedAt: Date) {
             entries[token] = Entry(value: value, fetchedAt: fetchedAt)
         }
+    }
+
+    init(tokenRefreshService: CodexTokenRefreshService = CodexTokenRefreshService()) {
+        self.tokenRefreshService = tokenRefreshService
     }
 
     // MARK: - Public
@@ -62,6 +75,13 @@ final class UsageService: Sendable {
         let tokenAccountMetadata = await fetchAccountMetadata(
             for: metadataTokens,
             forceRefresh: forceMetadataRefresh
+        )
+        // The reset-credit endpoint applies a tighter burst limit than usage and metadata.
+        // Fetch these serially after metadata so every account has a fair chance to populate.
+        let resetCreditAvailability = await fetchResetCreditAvailability(
+            validKeys: validKeys,
+            profiles: profiles,
+            usages: usages
         )
         let accountMetadataByID = mergedAccountMetadata(from: tokenAccountMetadata)
 
@@ -97,7 +117,7 @@ final class UsageService: Sendable {
                      ?? key.components(separatedBy: ":").last ?? key
             let alias = Account.normalizedAlias(p["alias"] as? String)
 
-            let aid = (usage["account_id"] as? String) ?? (p["accountId"] as? String) ?? ""
+            let aid = Self.resolvedAccountID(usage: usage, profile: p)
             let dedup = Self.dedupID(email: email, accountID: aid, profileKey: key)
             guard !seenEmails.contains(dedup) else { continue }
             seenEmails.insert(dedup)
@@ -113,6 +133,7 @@ final class UsageService: Sendable {
             let usesWorkspaceName = workspaceNamedAccountIDs.contains(aid)
             var ws = usesWorkspaceName ? teamNames[aid] : nil
             var planRenewalDate: Date?
+            var planCycleKind: PlanCycleKind?
 
             // Retry with the current account token when the real workspace name is unavailable.
             if let tok = accessToken(for: key, profile: p, usages: usages),
@@ -120,6 +141,7 @@ final class UsageService: Sendable {
                 let metadata = tokenAccountMetadata[tok]?[aid] ?? accountMetadataByID[aid]
                 if let metadata {
                     planRenewalDate = metadata.planRenewalDate
+                    planCycleKind = metadata.planCycleKind
 
                     if usesWorkspaceName,
                        (ws == nil || ws?.isEmpty == true || ws?.isGenericWorkspaceName == true),
@@ -156,12 +178,14 @@ final class UsageService: Sendable {
                 sessionResetSeconds: fiveHourWindow?.resetAfterSeconds ?? 0,
                 weeklyResetSeconds: weeklyWindow?.resetAfterSeconds ?? 0,
                 quotaWindows: hasUsage ? quotaWindows : [],
+                availableResetCount: resetCreditAvailability[key]?.count,
+                bankedResetExpirations: resetCreditAvailability[key]?.expirations,
                 planRenewalDate: planRenewalDate,
+                planCycleKind: planCycleKind,
                 hasError: !hasUsage,
                 errorMessage: usageError ?? (!hasUsage ? "Codex usage unavailable" : nil)
             ))
         }
-        applyWorkspacePlanDates(to: &accounts)
         return accounts
     }
 
@@ -169,6 +193,18 @@ final class UsageService: Sendable {
 
     static func dedupID(email: String, accountID: String, profileKey: String) -> String {
         "\(email.lowercased())|\(accountID.isEmpty ? profileKey : accountID)"
+    }
+
+    static func resolvedAccountID(
+        usage: [String: Any],
+        profile: [String: Any]
+    ) -> String {
+        for candidate in [usage["account_id"] as? String, profile["accountId"] as? String] {
+            guard let value = candidate?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else { continue }
+            return value
+        }
+        return ""
     }
 
     static func quotaWindows(from rateLimit: [String: Any]?) -> [QuotaWindow] {
@@ -192,6 +228,41 @@ final class UsageService: Sendable {
             .sorted { $0.limitSeconds < $1.limitSeconds }
     }
 
+    static func availableResetCount(from response: [String: Any]) -> Int? {
+        bankedResetAvailability(from: response)?.count
+    }
+
+    static func bankedResetAvailability(from response: [String: Any]) -> BankedResetAvailability? {
+        guard response["error"] == nil else { return nil }
+        let resetCredits = (response["rate_limit_reset_credits"] as? [String: Any]) ?? response
+        guard let value = numericValue(
+            resetCredits["available_count"]
+        ),
+              value >= 0 else {
+            return nil
+        }
+        let count = Int(value)
+        guard count > 0 else {
+            return BankedResetAvailability(count: 0, expirations: [])
+        }
+
+        // The regular usage response includes only the count. The dedicated read-only
+        // endpoint additionally includes one entry per credit and its expiration.
+        guard let credits = resetCredits["credits"] as? [[String: Any]] else {
+            return BankedResetAvailability(count: count, expirations: nil)
+        }
+
+        let expirations = credits
+            .filter { credit in
+                guard let status = credit["status"] as? String else { return false }
+                return status.caseInsensitiveCompare("available") == .orderedSame
+            }
+            .compactMap { apiDateValue($0["expires_at"]) }
+            .sorted()
+
+        return BankedResetAvailability(count: count, expirations: expirations)
+    }
+
     private static func numericValue(_ value: Any?) -> Double? {
         if let value = value as? Double { return value }
         if let value = value as? Int { return Double(value) }
@@ -204,12 +275,39 @@ final class UsageService: Sendable {
     }
 
     private func fetchUsage(profileKey: String, profile: [String: Any]) async -> [String: Any] {
-        guard let accessToken = profile["access"] as? String,
-              !accessToken.isEmpty else {
+        let initial = await tokenRefreshService.credentialForUsage(
+            profileKey: profileKey,
+            profile: profile
+        )
+        guard case let .ready(credential) = initial else {
+            if case let .unavailable(message) = initial {
+                return ["error": message]
+            }
             return ["error": "missing access token"]
         }
 
-        return usage(await fetchUsage(token: accessToken), accessToken: accessToken)
+        var accessToken = credential.accessToken
+        var response = await fetchUsage(token: accessToken)
+
+        if !credential.didRefresh,
+           Self.authErrorCode(from: response) == "token_expired" {
+            let recovery = await tokenRefreshService.credentialForUsage(
+                profileKey: profileKey,
+                profile: profile,
+                forceRefresh: true
+            )
+            switch recovery {
+            case let .ready(refreshed) where refreshed.accessToken != accessToken:
+                accessToken = refreshed.accessToken
+                response = await fetchUsage(token: accessToken)
+            case let .unavailable(message):
+                return ["error": message]
+            default:
+                break
+            }
+        }
+
+        return usage(response, accessToken: accessToken)
     }
 
     private func fetchUsages(
@@ -217,11 +315,7 @@ final class UsageService: Sendable {
         profiles: [String: [String: Any]]
     ) async -> [String: [String: Any]] {
         let jobs: [(String, [String: Any])] = validKeys.compactMap { key in
-            guard let profile = profiles[key],
-                  let token = profile["access"] as? String,
-                  !token.isEmpty else {
-                return nil
-            }
+            guard let profile = profiles[key] else { return nil }
             return (key, profile)
         }
 
@@ -254,6 +348,84 @@ final class UsageService: Sendable {
         }
     }
 
+    private func fetchResetCreditAvailability(
+        validKeys: [String],
+        profiles: [String: [String: Any]],
+        usages: [String: [String: Any]]
+    ) async -> [String: BankedResetAvailability] {
+        var result: [String: BankedResetAvailability] = [:]
+        var jobs: [(profileKey: String, token: String, accountID: String)] = []
+
+        for key in validKeys {
+            if let availability = Self.bankedResetAvailability(from: usages[key] ?? [:]) {
+                result[key] = availability
+                // Zero has no expiration details to retrieve. A positive count still
+                // needs the dedicated endpoint so the UI can list every expiration.
+                if availability.count == 0 {
+                    continue
+                }
+            }
+            guard let profile = profiles[key],
+                  let token = accessToken(for: key, profile: profile, usages: usages),
+                  !token.isEmpty else {
+                continue
+            }
+            let accountID = Self.resolvedAccountID(
+                usage: usages[key] ?? [:],
+                profile: profile
+            )
+            guard !accountID.isEmpty else { continue }
+            jobs.append((key, token, accountID))
+        }
+
+        guard !jobs.isEmpty else { return result }
+
+        for job in jobs {
+            guard !Task.isCancelled else { break }
+            if let availability = await fetchResetCreditAvailability(
+                token: job.token,
+                accountID: job.accountID
+            ) {
+                result[job.profileKey] = availability
+            }
+        }
+        return result
+    }
+
+    private func fetchResetCreditAvailability(
+        token: String,
+        accountID: String
+    ) async -> BankedResetAvailability? {
+        for attempt in 0...Self.resetCreditRetryDelays.count {
+            if attempt > 0 {
+                do {
+                    try await Task.sleep(
+                        nanoseconds: Self.resetCreditRetryDelays[attempt - 1]
+                    )
+                } catch {
+                    return nil
+                }
+            }
+
+            let response = await apiGet(
+                "/backend-api/wham/rate-limit-reset-credits",
+                token: token,
+                accountID: accountID
+            )
+            if let availability = Self.bankedResetAvailability(from: response) {
+                return availability
+            }
+
+            let statusCode = response["http_status"] as? Int
+            let isTransient = statusCode == nil
+                || statusCode == 408
+                || statusCode == 429
+                || (statusCode.map { 500...599 ~= $0 } ?? false)
+            guard isTransient else { return nil }
+        }
+        return nil
+    }
+
     private func fetchAccountMetadata(token: String) async -> [String: AccountMetadata] {
         let data = await apiGet("/backend-api/accounts/check/v4-2023-04-27", token: token, timeout: 4)
         var result: [String: AccountMetadata] = [:]
@@ -261,9 +433,11 @@ final class UsageService: Sendable {
             for (aid, info) in accts {
                 let account = info["account"] as? [String: Any]
                 let entitlement = info["entitlement"] as? [String: Any]
+                let cycle = Self.planCycle(from: entitlement)
                 result[aid] = AccountMetadata(
                     workspaceName: account?["name"] as? String,
-                    planRenewalDate: planRenewalDate(from: entitlement)
+                    planRenewalDate: cycle?.date,
+                    planCycleKind: cycle?.kind
                 )
             }
         }
@@ -345,7 +519,8 @@ final class UsageService: Sendable {
                 if let existing = result[accountID] {
                     result[accountID] = AccountMetadata(
                         workspaceName: existing.workspaceName ?? metadata.workspaceName,
-                        planRenewalDate: existing.planRenewalDate ?? metadata.planRenewalDate
+                        planRenewalDate: existing.planRenewalDate ?? metadata.planRenewalDate,
+                        planCycleKind: existing.planRenewalDate != nil ? existing.planCycleKind : metadata.planCycleKind
                     )
                 } else {
                     result[accountID] = metadata
@@ -356,36 +531,26 @@ final class UsageService: Sendable {
         return result
     }
 
-    private func applyWorkspacePlanDates(to accounts: inout [Account]) {
-        var datesByWorkspace: [String: Date] = [:]
-
-        for account in accounts {
-            guard let date = account.planRenewalDate,
-                  !account.workspace.isGenericWorkspaceName else { continue }
-            datesByWorkspace[account.workspace] = date
-        }
-
-        guard !datesByWorkspace.isEmpty else { return }
-
-        for index in accounts.indices where accounts[index].planRenewalDate == nil {
-            let workspace = accounts[index].workspace
-            guard !workspace.isGenericWorkspaceName,
-                  let date = datesByWorkspace[workspace] else { continue }
-            accounts[index].planRenewalDate = date
-        }
-    }
-
-    private func apiGet(_ endpoint: String, token: String, timeout: TimeInterval = 10) async -> [String: Any] {
+    private func apiGet(
+        _ endpoint: String,
+        token: String,
+        accountID: String? = nil,
+        timeout: TimeInterval = 10
+    ) async -> [String: Any] {
         guard let url = URL(string: "https://chatgpt.com\(endpoint)") else {
             return ["error": "bad URL"]
         }
         var req = URLRequest(url: url, timeoutInterval: timeout)
+        req.httpMethod = "GET"
         req.setValue("Bearer \(token)",   forHTTPHeaderField: "Authorization")
         req.setValue(ua,                  forHTTPHeaderField: "User-Agent")
         req.setValue("application/json",  forHTTPHeaderField: "Accept")
         req.setValue("https://chatgpt.com",  forHTTPHeaderField: "Origin")
         req.setValue("https://chatgpt.com/", forHTTPHeaderField: "Referer")
         req.setValue("en-US,en;q=0.9",   forHTTPHeaderField: "Accept-Language")
+        if let accountID, !accountID.isEmpty {
+            req.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-ID")
+        }
         do {
             let (data, response) = try await URLSession.shared.data(for: req)
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -396,10 +561,13 @@ final class UsageService: Sendable {
                 }
                 return obj
             }
+            return [
+                "error": statusCode == 0 ? "parse error" : "HTTP \(statusCode)",
+                "http_status": statusCode,
+            ]
         } catch {
             return ["error": error.localizedDescription]
         }
-        return ["error": "parse error"]
     }
 
     private func usage(_ usage: [String: Any], accessToken: String) -> [String: Any] {
@@ -413,21 +581,10 @@ final class UsageService: Sendable {
             return error
         }
 
-        if let detail = data["detail"] as? [String: Any],
-           let code = detail["code"] as? String,
-           !code.isEmpty {
+        if let code = Self.authErrorCode(from: data) {
             switch code {
             case "deactivated_workspace":
                 return "Workspace deactivated"
-            default:
-                return code.replacingOccurrences(of: "_", with: " ")
-            }
-        }
-
-        if let apiError = data["error"] as? [String: Any],
-           let code = apiError["code"] as? String,
-           !code.isEmpty {
-            switch code {
             case "token_expired":
                 return "Token expired"
             case "token_invalidated":
@@ -463,16 +620,51 @@ final class UsageService: Sendable {
     }
 
     static func isRecoverableAuthError(_ message: String?) -> Bool {
-        message == "Token expired"
+        normalizedAuthMessage(message) == "token expired"
     }
 
     static func requiresRelogin(_ message: String?) -> Bool {
-        message == "Expired or revoked"
-            || message == "Token invalidated"
-            || message == "Token revoked"
-            || message == refreshFailedError
-            || message == "HTTP 401"
-            || message == "HTTP 403"
+        let normalized = normalizedAuthMessage(message)
+        return normalized == "expired or revoked"
+            || normalized == "token invalidated"
+            || normalized == "token revoked"
+            || normalized == normalizedAuthMessage(refreshFailedError)
+            || normalized == "http 401"
+            || normalized == "http 403"
+            || normalized == "re login required"
+    }
+
+    static func authErrorCode(from data: [String: Any]) -> String? {
+        let candidates: [String?] = [
+            (data["detail"] as? [String: Any])?["code"] as? String,
+            (data["error"] as? [String: Any])?["code"] as? String,
+            data["code"] as? String,
+        ]
+        guard let raw = candidates.compactMap({ $0 }).first else {
+            if let error = data["error"] as? String {
+                let normalized = normalizedAuthMessage(error)
+                if normalized == "token expired" { return "token_expired" }
+                if normalized == "token invalidated" { return "token_invalidated" }
+                if normalized == "token revoked" { return "token_revoked" }
+            }
+            return nil
+        }
+
+        return raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+    }
+
+    private static func normalizedAuthMessage(_ message: String?) -> String {
+        (message ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
     }
 
     private func readableAPIError(from data: [String: Any]) -> String? {
@@ -530,7 +722,7 @@ final class UsageService: Sendable {
             guard let profile = profiles[key],
                   let usage = usages[key] else { continue }
 
-            let accountID = (usage["account_id"] as? String) ?? (profile["accountId"] as? String) ?? ""
+            let accountID = Self.resolvedAccountID(usage: usage, profile: profile)
             guard !accountID.isEmpty else { continue }
 
             let planType = resolvedPlanType(profile: profile, usage: usage)
@@ -575,14 +767,19 @@ final class UsageService: Sendable {
         return !planType.isPersonalPlanType
     }
 
-    private func planRenewalDate(from entitlement: [String: Any]?) -> Date? {
+    static func planCycle(from entitlement: [String: Any]?) -> (date: Date, kind: PlanCycleKind)? {
         guard let entitlement else { return nil }
-        return dateValue(entitlement["renews_at"])
-            ?? dateValue(entitlement["expires_at"])
-            ?? dateValue((entitlement["discount"] as? [String: Any])?["discount_expires_at"])
+        if let date = apiDateValue(entitlement["renews_at"]) { return (date, .renewal) }
+        if let date = apiDateValue(entitlement["expires_at"]) { return (date, .expiration) }
+        // A discount ending does not establish a billing or subscription end date.
+        return nil
     }
 
     private func dateValue(_ value: Any?) -> Date? {
+        Self.apiDateValue(value)
+    }
+
+    private static func apiDateValue(_ value: Any?) -> Date? {
         if let string = value as? String {
             let fractionalFormatter = ISO8601DateFormatter()
             fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

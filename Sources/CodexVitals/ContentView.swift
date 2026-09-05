@@ -7,7 +7,7 @@ struct ContentView: View {
     @ObservedObject var appUpdater: AppUpdater
     @State private var isShowingSettings = false
 
-    static let preferredWidth: CGFloat = 652
+    static let preferredWidth: CGFloat = 900
 
     static func preferredHeight() -> CGFloat {
         let visibleHeight = NSScreen.main?.visibleFrame.height ?? 900
@@ -19,59 +19,52 @@ struct ContentView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HeaderView(vm: viewModel, isShowingSettings: $isShowingSettings)
-            thinDivider
+        ZStack {
+            VStack(spacing: 0) {
+                HeaderView(vm: viewModel, isShowingSettings: $isShowingSettings)
 
-            if isShowingSettings {
-                SettingsView(viewModel: viewModel, appUpdater: appUpdater)
-                    .frame(maxWidth: .infinity, maxHeight: Self.listMaxHeight())
-            } else {
-                if viewModel.isLoading && viewModel.accounts.isEmpty {
-                    SkeletonView()
-                } else if !viewModel.hasAnyAccount {
-                    emptyState
+                if isShowingSettings {
+                    SettingsView(viewModel: viewModel, appUpdater: appUpdater)
+                        .frame(maxWidth: .infinity, maxHeight: Self.listMaxHeight())
                 } else {
-                    ScrollView(.vertical) {
-                        AccountListView(vm: viewModel)
-                            .frame(maxWidth: .infinity)
+                    if viewModel.isLoading && viewModel.accounts.isEmpty {
+                        SkeletonView()
+                    } else if !viewModel.hasAnyAccount {
+                        emptyState
+                    } else {
+                        ScrollView(.vertical) {
+                            AccountListView(vm: viewModel)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .background(Theme.listSurfaceTint)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.panelCornerRadius, style: .continuous))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 7)
+                        .frame(maxHeight: Self.listMaxHeight())
                     }
-                    .background(Theme.listSurfaceTint)
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.panelCornerRadius, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: Theme.panelCornerRadius, style: .continuous)
-                            .stroke(Theme.listBorder, lineWidth: 0.6)
+                }
+
+
+                if !isShowingSettings && viewModel.errorsCount > 0 {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(Theme.warningText)
+                            .font(.system(size: 11))
+                        Text("\(viewModel.errorsCount) account(s) with errors")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                        Spacer()
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 7)
-                    .frame(maxHeight: Self.listMaxHeight())
+                    .padding(.horizontal, 12).padding(.vertical, 4)
                 }
-            }
 
-            thinDivider
-
-            if !isShowingSettings && viewModel.errorsCount > 0 {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(Theme.warningText)
-                        .font(.system(size: 11))
-                    Text("\(viewModel.errorsCount) account(s) with errors")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                    Spacer()
+                if let accountActionError = viewModel.accountActionError {
+                    FooterView(message: accountActionError)
                 }
-                .padding(.horizontal, 12).padding(.vertical, 4)
-                thinDivider
-            }
-
-            if let accountActionError = viewModel.accountActionError {
-                FooterView(message: accountActionError)
             }
         }
         .frame(width: Self.preferredWidth)
-        .background(Theme.popoverSurfaceTint)
-        .background(.ultraThinMaterial)
+        .background(Theme.appBackground)
         .background(
             Group {
                 Button("") { isShowingSettings.toggle() }.keyboardShortcut(",", modifiers: .command)
@@ -82,7 +75,6 @@ struct ContentView: View {
         )
     }
 
-    private var thinDivider: some View { Divider().opacity(0.15) }
 
     @ViewBuilder
     private var emptyState: some View {
@@ -99,13 +91,23 @@ struct ContentView: View {
                     .font(.system(size: 32)).foregroundColor(.secondary)
                 Text("No accounts found")
                     .font(.system(size: 14)).foregroundColor(.secondary)
-                Button {
-                    viewModel.addAccount()
+                Menu {
+                    Button("Add Codex Account", systemImage: "command") {
+                        viewModel.addCodexAccount()
+                    }
+                    Button {
+                        viewModel.addClaudeAccount()
+                    } label: {
+                        Label {
+                            Text("Add Claude Account")
+                        } icon: {
+                            ClaudeIconView(foregroundColor: .primary)
+                        }
+                    }
                 } label: {
                     Label("Add account", systemImage: "person.badge.plus")
                         .font(.system(size: 12, weight: .semibold))
                 }
-                .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .disabled(viewModel.hasPendingAccountAction)
             }
@@ -129,35 +131,24 @@ struct HeaderView: View {
     var body: some View {
         HStack(spacing: 8) {
             if isShowingSettings {
-                HeaderActionButton(
-                    action: {
-                        isShowingSettings = false
-                    },
-                    helpText: "Back",
-                    accessibilityText: "Back to accounts"
-                ) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.secondary)
-                }
-
-                Text("Settings")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.primary)
-
+                settingsTitle
                 Spacer(minLength: 0)
             } else if shouldShowSearchField {
                 compactSearchField
+                Spacer(minLength: 0)
             } else {
                 appBrandLockup
                 Spacer(minLength: 0)
             }
 
-            toolbarControls
+            if !isShowingSettings {
+                toolbarControls
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .frame(height: 48)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 12)
+        .frame(height: 56)
+        .background(Theme.headerSurface)
         .animation(.easeInOut(duration: 0.16), value: shouldShowSearchField)
         .onReceive(vm.$isLoading.dropFirst()) { isLoading in
             handleLoadingChange(isLoading)
@@ -167,100 +158,84 @@ struct HeaderView: View {
     @ViewBuilder
     private var toolbarControls: some View {
         HStack(spacing: 1) {
-            if !isShowingSettings {
+            HeaderActionButton(
+                action: toggleSearch,
+                isSelected: shouldShowSearchField,
+                helpText: shouldShowSearchField ? "Hide search" : "Search",
+                accessibilityText: shouldShowSearchField ? "Hide search" : "Search accounts"
+            ) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(shouldShowSearchField ? Theme.brandAccent : .secondary)
+            }
+
+            if vm.isAddingAccount {
                 HeaderActionButton(
-                    action: toggleSearch,
-                    isSelected: shouldShowSearchField,
-                    helpText: shouldShowSearchField ? "Hide search" : "Search",
-                    accessibilityText: shouldShowSearchField ? "Hide search" : "Search accounts"
+                    action: { vm.cancelRelogin() },
+                    isSelected: true,
+                    helpText: "Cancel adding account",
+                    accessibilityText: "Cancel adding account"
                 ) {
-                    Image(systemName: "magnifyingglass")
+                    Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(shouldShowSearchField ? .primary : .secondary)
+                        .foregroundColor(.secondary)
                 }
+            } else {
+                HeaderAccountMenu(vm: vm)
+            }
 
-                HeaderActionButton(
-                    action: toggleAccountCapture,
-                    isSelected: vm.isAddingAccount,
-                    isDisabled: vm.hasPendingAccountAction && !vm.isAddingAccount,
-                    helpText: vm.isAddingAccount ? "Cancel" : "Add account",
-                    accessibilityText: vm.isAddingAccount ? "Cancel adding account" : "Add account"
-                ) {
-                    Image(systemName: vm.isAddingAccount ? "xmark.circle.fill" : "person.badge.plus")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(vm.isAddingAccount ? .secondary : Theme.healthyAccent)
-                }
-
-                HeaderActionButton(
-                    action: { vm.toggleGroupByWorkspace() },
-                    isSelected: vm.groupByWorkspace,
-                    helpText: vm.groupByWorkspace ? "Ungroup workspaces" : "Group by workspace",
-                    accessibilityText: vm.groupByWorkspace ? "Ungroup workspaces" : "Group accounts by workspace"
-                ) {
-                    Image(systemName: "rectangle.3.group")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(vm.groupByWorkspace ? .primary : .secondary)
-                }
-
-                HeaderActionButton(
-                    action: requestRefresh,
-                    isDisabled: vm.isLoading,
-                    helpText: showsRefreshSuccess ? "Updated" : "Refresh",
-                    accessibilityText: showsRefreshSuccess ? "Usage updated" : "Refresh all accounts"
-                ) {
-                    if vm.isLoading {
-                        ProgressView()
-                            .controlSize(.mini)
-                    } else if showsRefreshSuccess {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 13))
-                            .foregroundColor(Theme.healthyAccent)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.secondary)
-                    }
-                }
-
-                toolbarDivider
-
-                HeaderActionButton(
-                    action: { isShowingSettings = true },
-                    helpText: "Settings",
-                    accessibilityText: "Settings"
-                ) {
-                    Image(systemName: "gearshape")
+            HeaderActionButton(
+                action: requestRefresh,
+                isDisabled: vm.isLoading,
+                helpText: showsRefreshSuccess ? "Updated" : "Refresh",
+                accessibilityText: showsRefreshSuccess ? "Usage updated" : "Refresh all accounts"
+            ) {
+                if vm.isLoading {
+                    ProgressView()
+                        .controlSize(.mini)
+                } else if showsRefreshSuccess {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(Theme.healthyAccent)
+                } else {
+                    Image(systemName: "arrow.clockwise")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
                 }
             }
 
+
             HeaderActionButton(
-                action: { NSApp.terminate(nil) },
-                helpText: "Quit Codex Vitals",
-                accessibilityText: "Quit Codex Vitals"
+                action: { isShowingSettings = true },
+                helpText: "Settings",
+                accessibilityText: "Settings"
             ) {
-                Image(systemName: "power")
+                Image(systemName: "gearshape")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.secondary)
             }
         }
         .padding(3)
-        .background(Theme.toolbarSurface)
-        .background(.ultraThinMaterial)
-        .clipShape(Capsule())
-        .overlay {
-            Capsule()
-                .stroke(Theme.toolbarBorder, lineWidth: 0.6)
-        }
-        .shadow(color: .black.opacity(0.07), radius: 3, y: 1)
     }
 
-    private var toolbarDivider: some View {
-        Rectangle()
-            .fill(Theme.controlBorder)
-            .frame(width: 0.5, height: 14)
-            .padding(.horizontal, 1)
+    private var settingsTitle: some View {
+        HStack(spacing: 8) {
+            Button {
+                isShowingSettings = false
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Back to accounts")
+
+            Text("Settings")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.primary)
+        }
     }
 
     private func toggleSearch() {
@@ -271,31 +246,15 @@ struct HeaderView: View {
         }
     }
 
-    private func toggleAccountCapture() {
-        if vm.isAddingAccount {
-            vm.cancelRelogin()
-        } else {
-            vm.addAccount()
-        }
-    }
-
     private var shouldShowSearchField: Bool {
         isSearchVisible || !vm.searchText.isEmpty
     }
 
     private var appBrandLockup: some View {
-        HStack(spacing: 7) {
-            AppBrandIcon()
-                .frame(width: 22, height: 22)
-
-            Text("Codex Vitals")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-        }
-        .fixedSize()
-        .help("Codex Vitals")
-        .transition(.opacity)
+        Text("Codex Vitals")
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(.primary)
+            .fixedSize()
     }
 
     private var compactSearchField: some View {
@@ -322,10 +281,6 @@ struct HeaderView: View {
         .background(Theme.toolbarSurface)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: Theme.controlCornerRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.controlCornerRadius, style: .continuous)
-                .stroke(Theme.controlBorder, lineWidth: 0.6)
-        }
         .transition(.opacity.combined(with: .move(edge: .trailing)))
     }
 
@@ -351,6 +306,47 @@ struct HeaderView: View {
             guard !Task.isCancelled else { return }
             showsRefreshSuccess = false
         }
+    }
+}
+
+private struct HeaderAccountMenu: View {
+    @ObservedObject var vm: UsageViewModel
+    @State private var isHovered = false
+
+    var body: some View {
+        Menu {
+            Button("Add Codex Account", systemImage: "command") {
+                vm.addCodexAccount()
+            }
+            Button {
+                vm.addClaudeAccount()
+            } label: {
+                Label {
+                    Text("Add Claude Account")
+                } icon: {
+                    ClaudeIconView(foregroundColor: .primary)
+                }
+            }
+        } label: {
+            Image(systemName: "person.badge.plus")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Theme.healthyAccent)
+                .frame(width: 28, height: 28)
+                .background {
+                    RoundedRectangle(cornerRadius: Theme.controlCornerRadius, style: .continuous)
+                        .fill(isHovered ? Theme.controlHoverSurface : .clear)
+                }
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(vm.hasPendingAccountAction)
+        .opacity(vm.hasPendingAccountAction ? 0.55 : 1)
+        .scaleEffect(isHovered && !vm.hasPendingAccountAction ? 1.02 : 1)
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .onHover { isHovered = $0 }
+        .help("Add account")
+        .accessibilityLabel("Add Codex or Claude account")
     }
 }
 
@@ -382,22 +378,19 @@ private struct HeaderActionButton<Label: View>: View {
     var body: some View {
         Button(action: action) {
             label
-                .frame(width: 26, height: 24)
+                .frame(width: 28, height: 28)
                 .background {
                     RoundedRectangle(cornerRadius: Theme.controlCornerRadius, style: .continuous)
                         .fill(controlSurface)
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: Theme.controlCornerRadius, style: .continuous)
-                        .stroke(controlBorder, lineWidth: 0.5)
                 }
                 .contentShape(RoundedRectangle(cornerRadius: Theme.controlCornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
         .opacity(isDisabled ? 0.55 : 1)
-        .scaleEffect(isHovered && !isDisabled ? 1.035 : 1)
+        .scaleEffect(isSelected ? 1.02 : (isHovered && !isDisabled ? 1.02 : 1))
         .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(.easeOut(duration: 0.16), value: isSelected)
         .onHover { isHovered = $0 }
         .help(helpText)
         .accessibilityLabel(accessibilityText)
@@ -410,40 +403,7 @@ private struct HeaderActionButton<Label: View>: View {
         return isHovered ? Theme.controlHoverSurface : .clear
     }
 
-    private var controlBorder: Color {
-        isSelected || isHovered ? Theme.controlBorder : .clear
-    }
-}
 
-struct AppBrandIcon: View {
-    private static let icon: NSImage? = {
-        guard let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
-              let image = NSImage(contentsOf: url) else {
-            return nil
-        }
-        image.size = NSSize(width: 20, height: 20)
-        return image
-    }()
-
-    var body: some View {
-        Group {
-            if let icon = Self.icon {
-                Image(nsImage: icon)
-                    .resizable()
-                    .interpolation(.high)
-            } else {
-                Image(systemName: "waveform.path.ecg")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.healthyAccent)
-            }
-        }
-        .frame(width: 22, height: 22)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
-        }
-    }
 }
 
 struct SearchTextField: NSViewRepresentable {

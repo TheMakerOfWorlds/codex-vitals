@@ -12,14 +12,18 @@ final class AppUpdater: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
 
-    init() {
+    init(startingUpdater: Bool = true) {
         controller = SPUStandardUpdaterController(
-            startingUpdater: true,
+            startingUpdater: startingUpdater,
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
 
         let updater = controller.updater
+        if AppInfo.isPersonalBuild {
+            // An unattended official release would replace the personal UI.
+            updater.automaticallyDownloadsUpdates = false
+        }
         canCheckForUpdates = updater.canCheckForUpdates
         refreshSettings()
 
@@ -42,7 +46,7 @@ final class AppUpdater: ObservableObject {
     }
 
     func setAutomaticallyInstallsUpdates(_ enabled: Bool) {
-        controller.updater.automaticallyDownloadsUpdates = enabled
+        controller.updater.automaticallyDownloadsUpdates = enabled && !AppInfo.isPersonalBuild
         refreshSettings()
     }
 

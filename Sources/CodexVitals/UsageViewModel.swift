@@ -1,10 +1,6 @@
-import Foundation
+import AppKit
 import Combine
-
-enum AccountMoveDirection {
-    case up
-    case down
-}
+import Foundation
 
 /// Central state holder observed by all SwiftUI views.
 @MainActor
@@ -15,6 +11,7 @@ final class UsageViewModel: ObservableObject {
     @Published var accounts: [Account] = []
     @Published var isLoading = false
     @Published var isAddingAccount = false
+    @Published var addingAccountProvider: AccountProvider?
     @Published var reloggingAccountID: String?
     @Published var switchingAccountID: String?
     @Published var removingAccountID: String?
@@ -32,6 +29,12 @@ final class UsageViewModel: ObservableObject {
     @Published var listDensity: ListDensity = .compact {
         didSet { UserDefaults.standard.set(listDensity.rawValue, forKey: "listDensity") }
     }
+    @Published var accountSortMode: AccountSortMode = .stored() {
+        didSet {
+            guard oldValue != accountSortMode else { return }
+            accountSortMode.save()
+        }
+    }
     @Published var autoRefreshInterval: AutoRefreshInterval = .stored {
         didSet {
             guard oldValue != autoRefreshInterval else { return }
@@ -39,34 +42,43 @@ final class UsageViewModel: ObservableObject {
             restartRefreshTimer()
         }
     }
+    @Published private(set) var resetNotificationsEnabled = UserDefaults.standard.bool(
+        forKey: "usageResetNotificationsEnabled"
+    )
+    @Published private(set) var isRequestingResetNotificationPermission = false
+    @Published private(set) var resetNotificationStatusMessage: String?
     @Published var waitingForResetCollapsed = false
     @Published var freeWaitingCollapsed = true
-    @Published private var usesManualAccountOrder = false
 
     // MARK: - Internals
 
     private let service = UsageService()
+    private let claudeService = ClaudeAccountService()
     private let captureService = CodexAccountCaptureService()
     private let switchService = CodexAccountSwitchService()
     private let removalService = LocalAccountRemovalService()
+    private let resetNotificationService: any UsageResetNotifying
     private var refreshTimer: Timer?
     private var reloginTask: Task<Void, Never>?
     private var switchTask: Task<Void, Never>?
     private var pendingDebouncedRefreshTask: Task<Void, Never>?
     private var pendingRefreshAfterCurrent = false
     private var pendingForceMetadataRefreshAfterCurrent = false
-    private let manualAccountOrderKey = "manualAccountOrderingEnabled"
+    private var pendingResetNotificationCheck = false
+    private let resetNotificationsEnabledKey = "usageResetNotificationsEnabled"
+    private static let bankedResetCacheTTL: TimeInterval = 6 * 60 * 60
 
     // MARK: - Init
 
-    init() {
+    init(resetNotificationService: any UsageResetNotifying = UsageResetNotificationService(), loadPersistedState: Bool = true) {
+        self.resetNotificationService = resetNotificationService
+        guard loadPersistedState else { return }
         if UserDefaults.standard.object(forKey: "groupByWorkspace") != nil {
             groupByWorkspace = UserDefaults.standard.bool(forKey: "groupByWorkspace")
         }
         UserDefaults.standard.removeObject(forKey: "accountInformationMode")
-        usesManualAccountOrder = UserDefaults.standard.bool(forKey: manualAccountOrderKey)
         listDensity = .compact
-        if AccountProfileStore.hasProfiles, let snap = AccountSnapshotStore.load() {
+        if let snap = AccountSnapshotStore.load() {
             accounts = snap.accounts
             lastRefresh = snap.lastRefresh
         }
@@ -87,6 +99,10 @@ final class UsageViewModel: ObservableObject {
     private var searchFiltered: [Account] {
         guard !searchText.isEmpty else { return visibleAccounts }
         return visibleAccounts.filter { Self.matchesSearch($0, searchText: searchText) }
+    }
+
+    private var usesManualAccountOrder: Bool {
+        accountSortMode == .manual
     }
 
     static func matchesSearch(_ account: Account, searchText: String) -> Bool {
@@ -213,18 +229,29 @@ final class UsageViewModel: ObservableObject {
         return order.map { ($0, map[$0]!) }
     }
 
+    static func groupByProvider(_ accounts: [Account]) -> [(provider: AccountProvider, accounts: [Account])] {
+        AccountProvider.allCases.compactMap { provider in
+            let matching = accounts.filter { $0.accountProvider == provider }
+            return matching.isEmpty ? nil : (provider, matching)
+        }
+    }
+
     var errorsCount: Int { Self.errorCount(in: accounts) }
 
     static func errorCount(in accounts: [Account]) -> Int {
         accounts.filter(\.hasError).count
     }
 
-    func workspaceDisplayName(for workspace: String) -> String {
-        accounts.first(where: { $0.workspace == workspace })?.displayWorkspaceName ?? workspace
+    func workspaceDisplayName(for workspace: String, provider: AccountProvider) -> String {
+        accounts.first(where: {
+            $0.workspace == workspace && $0.accountProvider == provider
+        })?.displayWorkspaceName ?? workspace
     }
 
-    func workspaceHasDisplayAlias(_ workspace: String) -> Bool {
-        accounts.first(where: { $0.workspace == workspace })?.hasDisplayWorkspaceAlias ?? false
+    func workspaceHasDisplayAlias(_ workspace: String, provider: AccountProvider) -> Bool {
+        accounts.first(where: {
+            $0.workspace == workspace && $0.accountProvider == provider
+        })?.hasDisplayWorkspaceAlias ?? false
     }
 
     private func sortByManualOrder(_ accounts: [Account]) -> [Account] {
@@ -249,41 +276,153 @@ final class UsageViewModel: ObservableObject {
 
     // MARK: - Actions
 
-    func refresh(forceMetadataRefresh: Bool = false) {
+    func refresh(forceMetadataRefresh: Bool = false, notifyOnReset: Bool = false) {
         pendingDebouncedRefreshTask?.cancel()
         pendingDebouncedRefreshTask = nil
 
         guard !isLoading else {
             pendingRefreshAfterCurrent = true
             pendingForceMetadataRefreshAfterCurrent = pendingForceMetadataRefreshAfterCurrent || forceMetadataRefresh
+            pendingResetNotificationCheck = pendingResetNotificationCheck || notifyOnReset
             return
         }
 
-        runRefresh(forceMetadataRefresh: forceMetadataRefresh)
+        runRefresh(forceMetadataRefresh: forceMetadataRefresh, notifyOnReset: notifyOnReset)
     }
 
-    private func runRefresh(forceMetadataRefresh: Bool) {
+    private func runRefresh(forceMetadataRefresh: Bool, notifyOnReset: Bool) {
+        let previousAccounts = accounts
+        let previousRefresh = lastRefresh
         isLoading = true
         error = nil
         codexLoginStatus = CodexLoginStatusStore.load()
         refreshCodexAvailability()
 
         Task {
-            let result = await service.loadAll(forceMetadataRefresh: forceMetadataRefresh)
-            accounts = result
+            async let codexAccounts = service.loadAll(forceMetadataRefresh: forceMetadataRefresh)
+            async let claudeResult = claudeService.loadAccounts(
+                previousAccounts: previousAccounts,
+                previousFetchedAt: previousRefresh
+            )
+            let (loadedCodexAccounts, loadedClaudeResult) = await (codexAccounts, claudeResult)
+            let freshlyLoadedAccounts = loadedCodexAccounts + loadedClaudeResult.accounts
+            if let claudeError = loadedClaudeResult.errorMessage {
+                accountActionError = claudeError
+            }
             let now = Date()
+            let loadedAccounts = Self.preservingBankedResetDetails(
+                in: freshlyLoadedAccounts,
+                from: previousAccounts,
+                previousFetchedAt: previousRefresh,
+                now: now
+            )
+            let resetEvents = notifyOnReset && resetNotificationsEnabled
+                ? UsageResetDetector.detect(
+                    previousAccounts: previousAccounts,
+                    previousFetchedAt: previousRefresh,
+                    currentAccounts: loadedAccounts,
+                    currentFetchedAt: now
+                )
+                : []
+            accounts = loadedAccounts
             lastRefresh = now
             AccountSnapshotStore.save(accounts: accounts, lastRefresh: now)
             codexLoginStatus = CodexLoginStatusStore.load()
             refreshCodexAvailability()
             isLoading = false
             restartRefreshTimer()
+            if !resetEvents.isEmpty {
+                await resetNotificationService.deliver(events: resetEvents)
+            }
             if pendingRefreshAfterCurrent {
                 let shouldForceMetadata = pendingForceMetadataRefreshAfterCurrent
+                let shouldNotifyOnReset = pendingResetNotificationCheck
                 pendingRefreshAfterCurrent = false
                 pendingForceMetadataRefreshAfterCurrent = false
-                refresh(forceMetadataRefresh: shouldForceMetadata)
+                pendingResetNotificationCheck = false
+                refresh(
+                    forceMetadataRefresh: shouldForceMetadata,
+                    notifyOnReset: shouldNotifyOnReset
+                )
             }
+        }
+    }
+
+    /// Keeps a recent successful read-only reset-credit result when the detail endpoint is
+    /// temporarily rate limited. Fresh counts always win, and known expired credits are pruned.
+    static func preservingBankedResetDetails(
+        in currentAccounts: [Account],
+        from previousAccounts: [Account],
+        previousFetchedAt: Date?,
+        now: Date
+    ) -> [Account] {
+        let previousByID = Dictionary(uniqueKeysWithValues: previousAccounts.map { ($0.id, $0) })
+        let cacheIsFresh = previousFetchedAt.map {
+            let age = now.timeIntervalSince($0)
+            return age >= 0 && age <= bankedResetCacheTTL
+        } ?? false
+
+        return currentAccounts.map { currentValue in
+            guard !currentValue.isClaudeAccount,
+                  let previous = previousByID[currentValue.id] else {
+                return currentValue
+            }
+
+            var current = currentValue
+            if current.availableResetCount == nil, cacheIsFresh,
+               let previousCount = previous.availableResetCount {
+                let previousDates = previous.bankedResetExpirations
+                let expiredKnownCount = previousDates?.filter { $0 <= now }.count ?? 0
+                current.availableResetCount = max(0, previousCount - expiredKnownCount)
+                current.bankedResetExpirations = previousDates?.filter { $0 > now }
+                if current.availableResetCount == 0 {
+                    current.bankedResetExpirations = []
+                }
+                return current
+            }
+
+            if current.bankedResetExpirations == nil,
+               current.availableResetCount == previous.availableResetCount {
+                current.bankedResetExpirations = previous.bankedResetExpirations?.filter { $0 > now }
+            }
+            return current
+        }
+    }
+
+    func setResetNotificationsEnabled(_ enabled: Bool) {
+        if !enabled {
+            UserDefaults.standard.set(false, forKey: resetNotificationsEnabledKey)
+            resetNotificationsEnabled = false
+            resetNotificationStatusMessage = nil
+            return
+        }
+
+        guard !isRequestingResetNotificationPermission else { return }
+        isRequestingResetNotificationPermission = true
+        resetNotificationStatusMessage = nil
+        Task {
+            let granted = await resetNotificationService.requestAuthorization()
+            UserDefaults.standard.set(granted, forKey: resetNotificationsEnabledKey)
+            resetNotificationsEnabled = granted
+            isRequestingResetNotificationPermission = false
+            if !granted {
+                resetNotificationStatusMessage = "Notifications are disabled in System Settings"
+            }
+        }
+    }
+
+    func refreshResetNotificationAuthorization() {
+        guard resetNotificationsEnabled else { return }
+        Task {
+            let status = await resetNotificationService.authorizationStatus()
+            let isAuthorized = status == .authorized || status == .provisional
+            guard !isAuthorized else {
+                resetNotificationStatusMessage = nil
+                return
+            }
+            UserDefaults.standard.set(false, forKey: resetNotificationsEnabledKey)
+            resetNotificationsEnabled = false
+            resetNotificationStatusMessage = "Notifications are disabled in System Settings"
         }
     }
 
@@ -302,25 +441,44 @@ final class UsageViewModel: ObservableObject {
     }
 
     func needsRelogin(_ account: Account) -> Bool {
-        !codexLoginStatus.contains(account)
-            || UsageService.isExpiredOrRevokedAuthError(account.errorMessage)
+        if account.isClaudeAccount {
+            return [
+                ClaudeAccountStatus.tokenExpired.rawValue,
+                ClaudeAccountStatus.reloginRequired.rawValue,
+                ClaudeAccountStatus.noCredentials.rawValue,
+            ].contains(account.providerStatus)
+        }
+        return !codexLoginStatus.contains(account)
+            || UsageService.requiresRelogin(account.errorMessage)
     }
 
     func isRelogging(_ account: Account) -> Bool {
         reloggingAccountID == account.id
     }
 
-    func isSwitchingToCodex(_ account: Account) -> Bool {
+    func isSwitchingAccount(_ account: Account) -> Bool {
         switchingAccountID == account.id
     }
 
-    func isActiveInCodex(_ account: Account) -> Bool {
+    func isActiveAccount(_ account: Account) -> Bool {
+        if account.isClaudeAccount {
+            return account.providerIsActive == true
+        }
         guard isCodexInstalled else { return false }
         guard let activeCodexProfileKey,
               let profileKey = account.profileKey else {
             return false
         }
         return activeCodexProfileKey == profileKey
+    }
+
+    func showsSwitchControls(for account: Account) -> Bool {
+        account.isClaudeAccount ? account.providerProfileID != nil : isCodexInstalled
+    }
+
+    func canSwitchAccount(_ account: Account) -> Bool {
+        guard showsSwitchControls(for: account) else { return false }
+        return account.canSwitchProviderAccount
     }
 
     var hasPendingAccountAction: Bool {
@@ -331,10 +489,15 @@ final class UsageViewModel: ObservableObject {
     }
 
     func addAccount() {
+        addCodexAccount()
+    }
+
+    func addCodexAccount() {
         guard !hasPendingAccountAction else { return }
         pendingDebouncedRefreshTask?.cancel()
         pendingDebouncedRefreshTask = nil
         isAddingAccount = true
+        addingAccountProvider = .codex
         accountActionError = nil
 
         reloginTask = Task {
@@ -343,16 +506,50 @@ final class UsageViewModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 codexLoginStatus = CodexLoginStatusStore.load()
                 isAddingAccount = false
+                addingAccountProvider = nil
                 reloginTask = nil
                 schedulePostCaptureRefresh()
             } catch is CancellationError {
                 isAddingAccount = false
+                addingAccountProvider = nil
                 reloginTask = nil
                 accountActionError = nil
             } catch {
                 isAddingAccount = false
+                addingAccountProvider = nil
                 reloginTask = nil
                 accountActionError = error.localizedDescription
+            }
+        }
+    }
+
+    func addClaudeAccount() {
+        guard !hasPendingAccountAction else { return }
+        pendingDebouncedRefreshTask?.cancel()
+        pendingDebouncedRefreshTask = nil
+        isAddingAccount = true
+        addingAccountProvider = .claude
+        accountActionError = nil
+
+        reloginTask = Task {
+            do {
+                _ = try await claudeService.addAccount()
+                guard !Task.isCancelled else { return }
+                isAddingAccount = false
+                addingAccountProvider = nil
+                reloginTask = nil
+                refresh(forceMetadataRefresh: true)
+            } catch is CancellationError {
+                isAddingAccount = false
+                addingAccountProvider = nil
+                reloginTask = nil
+                accountActionError = nil
+            } catch {
+                isAddingAccount = false
+                addingAccountProvider = nil
+                reloginTask = nil
+                accountActionError = error.localizedDescription
+                refresh()
             }
         }
     }
@@ -366,12 +563,25 @@ final class UsageViewModel: ObservableObject {
 
         reloginTask = Task {
             do {
-                _ = try await captureService.captureAccount(for: account)
+                if account.isClaudeAccount {
+                    guard let profileID = account.providerProfileID else {
+                        throw ClaudeNativeError.profileMissing
+                    }
+                    _ = try await claudeService.reauthenticate(profileID: profileID)
+                } else {
+                    _ = try await captureService.captureAccount(for: account)
+                }
                 guard !Task.isCancelled else { return }
-                codexLoginStatus = CodexLoginStatusStore.load()
+                if !account.isClaudeAccount {
+                    codexLoginStatus = CodexLoginStatusStore.load()
+                }
                 reloggingAccountID = nil
                 reloginTask = nil
-                schedulePostCaptureRefresh()
+                if account.isClaudeAccount {
+                    refresh(forceMetadataRefresh: true)
+                } else {
+                    schedulePostCaptureRefresh()
+                }
             } catch is CancellationError {
                 reloggingAccountID = nil
                 reloginTask = nil
@@ -386,13 +596,34 @@ final class UsageViewModel: ObservableObject {
 
     func cancelRelogin() {
         reloginTask?.cancel()
+        Task { await claudeService.cancelLogin() }
         reloginTask = nil
         reloggingAccountID = nil
         isAddingAccount = false
+        addingAccountProvider = nil
         accountActionError = nil
     }
 
     func setAlias(_ alias: String?, for account: Account) {
+        if account.isClaudeAccount {
+            guard let profileID = account.providerProfileID else {
+                accountActionError = "Claude account profile is missing."
+                return
+            }
+            Task {
+                do {
+                    let normalizedAlias = Account.normalizedAlias(alias)
+                    try await claudeService.updateAlias(profileID: profileID, alias: normalizedAlias)
+                    if let index = accounts.firstIndex(where: { $0.id == account.id }) {
+                        accounts[index].alias = normalizedAlias
+                        AccountSnapshotStore.save(accounts: accounts, lastRefresh: lastRefresh)
+                    }
+                } catch {
+                    accountActionError = error.localizedDescription
+                }
+            }
+            return
+        }
         guard let profileKey = account.profileKey else {
             accountActionError = "Account has no local profile to label."
             return
@@ -410,111 +641,262 @@ final class UsageViewModel: ObservableObject {
         }
     }
 
-    func setWorkspaceAlias(_ alias: String?, for workspace: String) {
+    func setPlanRenewalDate(_ date: Date?, for account: Account) {
+        guard account.isClaudeAccount,
+              let profileID = account.providerProfileID else {
+            accountActionError = "Claude account profile is missing."
+            return
+        }
+
+        Task {
+            do {
+                try await claudeService.updatePlanRenewalDate(profileID: profileID, date: date)
+                if let index = accounts.firstIndex(where: { $0.id == account.id }) {
+                    accounts[index].planRenewalDate = date
+                    AccountSnapshotStore.save(accounts: accounts, lastRefresh: lastRefresh)
+                }
+            } catch {
+                accountActionError = error.localizedDescription
+            }
+        }
+    }
+
+    func setWorkspaceAlias(
+        _ alias: String?,
+        for workspace: String,
+        provider: AccountProvider
+    ) {
         let workspaceKey = workspace.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !workspaceKey.isEmpty else {
             accountActionError = "Workspace has no local name to label."
             return
         }
 
+        let normalizedAlias = Account.normalizedAlias(alias)
+        if provider == .claude {
+            Task {
+                do {
+                    try await claudeService.updateWorkspaceAlias(
+                        workspace: workspaceKey,
+                        alias: normalizedAlias
+                    )
+                    applyWorkspaceAlias(
+                        normalizedAlias,
+                        workspace: workspaceKey,
+                        provider: provider
+                    )
+                } catch {
+                    accountActionError = error.localizedDescription
+                }
+            }
+            return
+        }
+
         do {
-            let normalizedAlias = Account.normalizedAlias(alias)
             try AccountProfileStore.updateWorkspaceAlias(workspace: workspaceKey, alias: normalizedAlias)
-            var changed = false
-            for index in accounts.indices where accounts[index].workspace == workspaceKey {
-                accounts[index].workspaceAlias = normalizedAlias
-                changed = true
-            }
-            if changed {
-                AccountSnapshotStore.save(accounts: accounts, lastRefresh: lastRefresh)
-            }
+            applyWorkspaceAlias(normalizedAlias, workspace: workspaceKey, provider: provider)
         } catch {
             accountActionError = error.localizedDescription
         }
     }
 
-    func canMoveAccount(_ account: Account, direction: AccountMoveDirection) -> Bool {
-        guard searchText.isEmpty, account.profileKey != nil else { return false }
-        let rows = movableAccountRows()
-        guard let index = rows.firstIndex(where: { $0.id == account.id }) else { return false }
-        switch direction {
-        case .up:
-            return index > 0
-        case .down:
-            return index < rows.count - 1
+    private func applyWorkspaceAlias(
+        _ alias: String?,
+        workspace: String,
+        provider: AccountProvider
+    ) {
+        var changed = false
+        for index in accounts.indices where
+            accounts[index].workspace == workspace
+                && accounts[index].accountProvider == provider {
+            accounts[index].workspaceAlias = alias
+            changed = true
+        }
+        if changed {
+            AccountSnapshotStore.save(accounts: accounts, lastRefresh: lastRefresh)
         }
     }
 
-    func moveAccount(_ account: Account, direction: AccountMoveDirection) {
+    func canReorderAccount(_ account: Account) -> Bool {
+        let hasStoredProfile = account.isClaudeAccount
+            ? account.providerProfileID != nil
+            : account.profileKey != nil
+        return searchText.isEmpty && hasStoredProfile
+    }
+
+    @discardableResult
+    func reorderAccount(
+        draggedAccountID: String,
+        targetAccountID: String,
+        placeAfterTarget: Bool
+    ) -> Bool {
         guard searchText.isEmpty else {
             accountActionError = "Clear search before reordering accounts."
-            return
-        }
-        guard account.profileKey != nil else {
-            accountActionError = "Account has no local profile to reorder."
-            return
+            return false
         }
 
-        var rows = movableAccountRows()
-        guard let index = rows.firstIndex(where: { $0.id == account.id }) else { return }
-        let destination: Int
-        switch direction {
-        case .up:
-            destination = index - 1
-        case .down:
-            destination = index + 1
+        guard draggedAccountID != targetAccountID,
+              let draggedAccount = accounts.first(where: { $0.id == draggedAccountID }),
+              let targetAccount = accounts.first(where: { $0.id == targetAccountID }),
+              draggedAccount.accountProvider == targetAccount.accountProvider,
+              canReorderAccount(draggedAccount),
+              canReorderAccount(targetAccount) else {
+            return false
         }
-        guard rows.indices.contains(destination) else { return }
+        if groupByWorkspace && draggedAccount.workspace != targetAccount.workspace {
+            accountActionError = "Accounts can be reordered only within the same workspace while grouping is enabled."
+            return false
+        }
+        guard reorderSection(for: draggedAccount) == reorderSection(for: targetAccount) else {
+            accountActionError = "Accounts can be reordered only within the same usage section."
+            return false
+        }
 
-        rows.swapAt(index, destination)
-        let orderedProfileKeys = rows.compactMap(\.profileKey)
+        let provider = draggedAccount.accountProvider
+        let rows = movableAccountRows(provider: provider)
+        let currentIDs = rows.map(\.id)
+        let reorderedIDs = Self.reorderedIDs(
+            currentIDs,
+            moving: draggedAccountID,
+            relativeTo: targetAccountID,
+            placeAfterTarget: placeAfterTarget
+        )
+        guard reorderedIDs != currentIDs else { return false }
 
-        do {
-            try AccountProfileStore.updateDefaultOrder(orderedProfileKeys)
-            UserDefaults.standard.set(true, forKey: manualAccountOrderKey)
-            usesManualAccountOrder = true
-            reorderAccountsInMemory(profileKeys: orderedProfileKeys)
-            AccountSnapshotStore.save(accounts: accounts, lastRefresh: lastRefresh)
-        } catch {
-            accountActionError = error.localizedDescription
+        let rowsByID = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
+        let reorderedRows = reorderedIDs.compactMap { rowsByID[$0] }
+        switch provider {
+        case .codex:
+            let orderedProfileKeys = reorderedRows.compactMap(\.profileKey)
+            guard !orderedProfileKeys.isEmpty else { return false }
+            do {
+                try AccountProfileStore.updateDefaultOrder(orderedProfileKeys)
+                applyManualOrder(provider: provider, orderedKeys: orderedProfileKeys)
+                return true
+            } catch {
+                accountActionError = error.localizedDescription
+                return false
+            }
+        case .claude:
+            let orderedProfileIDs = reorderedRows.compactMap(\.providerProfileID)
+            guard !orderedProfileIDs.isEmpty else { return false }
+            Task {
+                do {
+                    try await claudeService.updateOrder(profileIDs: orderedProfileIDs)
+                    applyManualOrder(provider: provider, orderedKeys: orderedProfileIDs)
+                } catch {
+                    accountActionError = error.localizedDescription
+                }
+            }
+            return true
         }
     }
 
-    private func movableAccountRows() -> [Account] {
+    static func reorderedIDs(
+        _ ids: [String],
+        moving movingID: String,
+        relativeTo targetID: String,
+        placeAfterTarget: Bool
+    ) -> [String] {
+        guard let sourceIndex = ids.firstIndex(of: movingID),
+              let targetIndex = ids.firstIndex(of: targetID),
+              sourceIndex != targetIndex else {
+            return ids
+        }
+
+        var reordered = ids
+        let moving = reordered.remove(at: sourceIndex)
+        var destination = targetIndex + (placeAfterTarget ? 1 : 0)
+        if sourceIndex < destination {
+            destination -= 1
+        }
+        reordered.insert(moving, at: min(max(0, destination), reordered.count))
+        return reordered
+    }
+
+    private func applyManualOrder(provider: AccountProvider, orderedKeys: [String]) {
+        reorderAccountsInMemory(provider: provider, orderedKeys: orderedKeys)
+        accountSortMode = .manual
+        AccountSnapshotStore.save(accounts: accounts, lastRefresh: lastRefresh)
+    }
+
+    private func reorderSection(for account: Account) -> Int {
+        if account.isFreeWaitingForReset { return 2 }
+        if !account.isUsableForCodex { return 1 }
+        return 0
+    }
+
+    func setAccountSortMode(_ mode: AccountSortMode) {
+        accountSortMode = mode
+    }
+
+    private func movableAccountRows(provider: AccountProvider) -> [Account] {
+        let rows: [Account]
         if groupByWorkspace {
-            return groupedPriorityAccounts.flatMap { $0.1 }
+            rows = groupedPriorityAccounts.flatMap { $0.1 }
                 + groupedNormalActiveAccounts.flatMap { $0.1 }
                 + groupedExhaustedAccounts.flatMap { $0.1 }
                 + freeWaitingAccounts
+        } else {
+            rows = priorityAccounts + normalActiveAccounts + nonFreeExhaustedAccounts + freeWaitingAccounts
         }
-        return priorityAccounts + normalActiveAccounts + nonFreeExhaustedAccounts + freeWaitingAccounts
+        return rows.filter { $0.accountProvider == provider }
     }
 
-    private func reorderAccountsInMemory(profileKeys: [String]) {
+    private func reorderAccountsInMemory(
+        provider: AccountProvider,
+        orderedKeys: [String]
+    ) {
         var order: [String: Int] = [:]
-        for (index, key) in profileKeys.enumerated() where order[key] == nil {
+        for (index, key) in orderedKeys.enumerated() where order[key] == nil {
             order[key] = index
         }
-        accounts.sort { a, b in
-            let ia = a.profileKey.flatMap { order[$0] } ?? Int.max
-            let ib = b.profileKey.flatMap { order[$0] } ?? Int.max
+        let reorderedProviderAccounts = accounts
+            .filter { $0.accountProvider == provider }
+            .sorted { a, b in
+            let leftKey = provider == .claude ? a.providerProfileID : a.profileKey
+            let rightKey = provider == .claude ? b.providerProfileID : b.profileKey
+            let ia = leftKey.flatMap { order[$0] } ?? Int.max
+            let ib = rightKey.flatMap { order[$0] } ?? Int.max
             if ia != ib { return ia < ib }
             return a.displayName.localizedCaseInsensitiveCompare(b.displayName) == .orderedAscending
         }
+
+        var providerIndex = 0
+        accounts = accounts.map { account in
+            guard account.accountProvider == provider else { return account }
+            defer { providerIndex += 1 }
+            return reorderedProviderAccounts[providerIndex]
+        }
     }
 
-    func switchCodex(to account: Account) {
-        guard isCodexInstalled, !hasPendingAccountAction, !needsRelogin(account) else { return }
+    func switchAccount(to account: Account) {
+        guard showsSwitchControls(for: account),
+              canSwitchAccount(account),
+              !hasPendingAccountAction,
+              !needsRelogin(account) else { return }
         switchingAccountID = account.id
         accountActionError = nil
 
-        switchTask = Task.detached { [switchService] in
+        switchTask = Task.detached { [switchService, claudeService] in
             do {
-                let result = try switchService.switchToAccount(account)
+                if account.isClaudeAccount {
+                    guard let profileID = account.providerProfileID else {
+                        throw ClaudeNativeError.profileMissing
+                    }
+                    try await claudeService.switchAccount(profileID: profileID)
+                } else {
+                    let result = try await switchService.switchToAccount(account)
+                    await MainActor.run {
+                        self.activeCodexProfileKey = result.sourceProfileKey
+                    }
+                }
                 await MainActor.run {
-                    self.activeCodexProfileKey = result.sourceProfileKey
                     self.switchingAccountID = nil
                     self.switchTask = nil
+                    if account.isClaudeAccount {
+                        self.refresh()
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -534,6 +916,23 @@ final class UsageViewModel: ObservableObject {
         guard !hasPendingAccountAction else { return }
         removingAccountID = account.id
         accountActionError = nil
+
+        if account.isClaudeAccount {
+            Task {
+                do {
+                    guard let profileID = account.providerProfileID else {
+                        throw ClaudeNativeError.profileMissing
+                    }
+                    try await claudeService.removeAccount(profileID: profileID)
+                    removingAccountID = nil
+                    refresh()
+                } catch {
+                    removingAccountID = nil
+                    accountActionError = error.localizedDescription
+                }
+            }
+            return
+        }
 
         Task.detached { [removalService] in
             do {
@@ -578,7 +977,7 @@ final class UsageViewModel: ObservableObject {
         refreshTimer = nil
         guard !isLoading, let interval = autoRefreshInterval.seconds else { return }
         let t = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor in self?.refresh(notifyOnReset: true) }
         }
         RunLoop.main.add(t, forMode: .common)
         refreshTimer = t

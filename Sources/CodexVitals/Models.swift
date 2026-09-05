@@ -1,9 +1,21 @@
 import AppKit
 import SwiftUI
 
+enum AccountProvider: String, Codable, CaseIterable, Sendable {
+    case codex
+    case claude
+
+    var displayName: String {
+        switch self {
+        case .codex: return "Codex"
+        case .claude: return "Claude"
+        }
+    }
+}
+
 // MARK: - Quota Window
 
-struct QuotaWindow: Equatable, Codable {
+struct QuotaWindow: Equatable, Codable, Sendable {
     enum Kind: Equatable {
         case fiveHour
         case weekly
@@ -66,7 +78,12 @@ struct QuotaWindow: Equatable, Codable {
 
 // MARK: - Account
 
-struct Account: Identifiable, Equatable, Codable {
+enum PlanCycleKind: String, Codable, Sendable {
+    case renewal
+    case expiration
+}
+
+struct Account: Identifiable, Equatable, Codable, Sendable {
     let id: String          // dedup key: "email|accountId"
     let profileKey: String?
     let email: String
@@ -79,9 +96,30 @@ struct Account: Identifiable, Equatable, Codable {
     let sessionResetSeconds: Double
     let weeklyResetSeconds: Double
     var quotaWindows: [QuotaWindow]? = nil
+    /// Banked usage-limit resets currently available for this Codex account.
+    /// `nil` means the best-effort reset-credit lookup was unavailable.
+    var availableResetCount: Int? = nil
+    /// Expiration instants for the available banked resets, ordered soonest first.
+    /// `nil` means the count is known but the detailed read-only lookup was unavailable.
+    var bankedResetExpirations: [Date]? = nil
+    var fableQuotaWindow: QuotaWindow? = nil
     var planRenewalDate: Date?
+    var planCycleKind: PlanCycleKind? = nil
     let hasError: Bool
     let errorMessage: String?
+    var provider: AccountProvider? = nil
+    var providerAccountNumber: Int? = nil
+    var providerProfileID: String? = nil
+    var providerIsActive: Bool? = nil
+    var providerStatus: String? = nil
+
+    var accountProvider: AccountProvider {
+        provider ?? .codex
+    }
+
+    var isClaudeAccount: Bool {
+        accountProvider == .claude
+    }
 
     var emailPrefix: String {
         email.components(separatedBy: "@").first ?? email
@@ -100,11 +138,41 @@ struct Account: Identifiable, Equatable, Codable {
     }
 
     var displayPlanName: String? {
-        PlanDisplayFormatter.badgeText(for: plan)
+        if isClaudeAccount,
+           plan.trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare("Claude") == .orderedSame {
+            return nil
+        }
+        return PlanDisplayFormatter.badgeText(for: plan)
     }
 
     var displayWorkspaceName: String {
         Account.normalizedAlias(workspaceAlias) ?? workspace
+    }
+
+    /// Personal profiles use the plan as a placeholder workspace. Show it only once.
+    var secondaryWorkspaceName: String? {
+        let workspaceName = displayWorkspaceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !workspaceName.isEmpty, workspaceName != "?" else { return nil }
+        if let planName = displayPlanName,
+           workspaceName.caseInsensitiveCompare(planName) == .orderedSame { return nil }
+        if !hasDisplayWorkspaceAlias,
+           workspaceName.caseInsensitiveCompare(plan.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame { return nil }
+        if let alias = displayAlias, workspaceName.caseInsensitiveCompare(alias) == .orderedSame { return nil }
+        return workspaceName
+    }
+
+    var planCycleLabel: String {
+        switch planCycleKind {
+        case .renewal: return "Renews"
+        case .expiration: return "Plan ends"
+        case nil: return isClaudeAccount ? "Renews" : "Cycle ends"
+        }
+    }
+
+    var planCycleSymbol: String {
+        planCycleKind == .renewal || (planCycleKind == nil && isClaudeAccount)
+            ? "dollarsign.arrow.circlepath" : "calendar"
     }
 
     var hasDisplayWorkspaceAlias: Bool {
@@ -112,7 +180,7 @@ struct Account: Identifiable, Equatable, Codable {
     }
 
     var searchText: String {
-        [displayAlias, email, displayWorkspaceName, workspace, plan]
+        [displayAlias, email, displayWorkspaceName, workspace, plan, accountProvider.displayName]
             .compactMap { $0 }
             .joined(separator: " ")
     }
@@ -128,7 +196,9 @@ struct Account: Identifiable, Equatable, Codable {
     var accountID: String {
         let pieces = id.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
         guard pieces.count == 2 else { return "" }
-        return String(pieces[1])
+        let value = String(pieces[1])
+        guard value != profileKey else { return "" }
+        return value
     }
 
     /// New snapshots store exact API windows. Older snapshots fall back to the legacy 5h/1w fields.
@@ -208,6 +278,20 @@ struct Account: Identifiable, Equatable, Codable {
         !hasError && !usageWindows.isEmpty && usageWindows.allSatisfy { !$0.isExhausted }
     }
 
+    var canSwitchProviderAccount: Bool {
+        guard isClaudeAccount else {
+            return !hasError && !usageWindows.isEmpty
+        }
+        switch providerStatus {
+        case "ok", "cached":
+            return !hasError && !usageWindows.isEmpty
+        case "unavailable":
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Hours until weekly window resets (from API `reset_after_seconds`).
     var hoursUntilWeeklyReset: Double {
         guard let weeklyQuotaWindow else { return .infinity }
@@ -243,6 +327,36 @@ struct Account: Identifiable, Equatable, Codable {
 enum ListDensity: String {
     case expanded
     case compact
+}
+
+enum AccountSortMode: String, CaseIterable, Identifiable {
+    case usage
+    case manual
+
+    static let userDefaultsKey = "accountSortMode"
+    static let legacyManualOrderKey = "manualAccountOrderingEnabled"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .usage: return "Usage"
+        case .manual: return "Manual"
+        }
+    }
+
+    static func stored(in defaults: UserDefaults = .standard) -> AccountSortMode {
+        if let rawValue = defaults.string(forKey: userDefaultsKey),
+           let mode = AccountSortMode(rawValue: rawValue) {
+            return mode
+        }
+        return defaults.bool(forKey: legacyManualOrderKey) ? .manual : .usage
+    }
+
+    func save(in defaults: UserDefaults = .standard) {
+        defaults.set(rawValue, forKey: Self.userDefaultsKey)
+        defaults.set(self == .manual, forKey: Self.legacyManualOrderKey)
+    }
 }
 
 enum AutoRefreshInterval: Int, CaseIterable, Identifiable {
@@ -315,36 +429,83 @@ extension String {
 // MARK: - Theme
 
 struct Theme {
+    static let brandAccent = Color(lightHex: "168F83", darkHex: "5AD5C7")
     static let healthyAccent = Color(hex: "30D158")
     static let warningAccent = Color(hex: "FF9F0A")
     static let dangerAccent = Color(hex: "FF453A")
 
-    static let panelCornerRadius: CGFloat = 12
-    static let rowCornerRadius: CGFloat = 9
+    static let panelCornerRadius: CGFloat = 10
+    static let settingsCardCornerRadius: CGFloat = 12
+    static let rowCornerRadius: CGFloat = 8
     static let controlCornerRadius: CGFloat = 7
+
+    static let appTitleFont = Font.system(size: 14, weight: .semibold)
+    static let sectionTitleFont = Font.system(size: 10.5, weight: .semibold)
+    static let accountTitleFont = Font.system(size: 11.5, weight: .semibold)
+    static let accountEmailFont = Font.system(size: 10.5, weight: .regular)
+    static let metadataFont = Font.system(size: 10, weight: .medium)
+    static let metricFont = Font.system(size: 10.5, weight: .semibold)
+    static let settingsLabelFont = Font.system(size: 13, weight: .medium)
 
     static let healthyText = Color(lightHex: "157D40", darkHex: "30D158")
     static let warningText = Color(lightHex: "A25800", darkHex: "FF9F0A")
     static let dangerText = Color(lightHex: "B92F27", darkHex: "FF453A")
 
-    static let popoverSurfaceTint = Color(lightHex: "12FFFFFF", darkHex: "0D000000")
-    static let toolbarSurface = Color(lightHex: "28FFFFFF", darkHex: "12FFFFFF")
-    static let toolbarBorder = Color(lightHex: "1F000000", darkHex: "2BFFFFFF")
+    static let appBackground = Color(lightHex: "F7F8FA", darkHex: "17181C")
+    static let headerSurface = appBackground
+    static let toolbarSurface = Color(lightHex: "B8FFFFFF", darkHex: "B026272D")
+    static let toolbarBorder = Color(lightHex: "22000000", darkHex: "32FFFFFF")
     static let controlHoverSurface = Color(lightHex: "12000000", darkHex: "18FFFFFF")
-    static let controlSelectedSurface = Color(lightHex: "1A000000", darkHex: "24FFFFFF")
+    static let controlSelectedSurface = Color(lightHex: "1F168F83", darkHex: "2A5AD5C7")
+    static let controlSelectedBorder = Color(lightHex: "35168F83", darkHex: "485AD5C7")
     static let controlBorder = Color(lightHex: "12000000", darkHex: "20FFFFFF")
-    static let listSurfaceTint = Color(lightHex: "26FFFFFF", darkHex: "0FFFFFFF")
-    static let listBorder = Color(lightHex: "20000000", darkHex: "30FFFFFF")
-    static let listDivider = Color(lightHex: "16000000", darkHex: "20FFFFFF")
-    static let sectionSurface = Color(lightHex: "08000000", darkHex: "0FFFFFFF")
-    static let rowHoverSurface = Color(lightHex: "10000000", darkHex: "18FFFFFF")
-    static let rowHoverBorder = Color(lightHex: "12000000", darkHex: "20FFFFFF")
-    static let activeRowSurface = Color(lightHex: "1230D158", darkHex: "1630D158")
-    static let activeRowBorder = Color(lightHex: "2030D158", darkHex: "2B30D158")
-    static let metricSurface = Color(lightHex: "2EFFFFFF", darkHex: "18FFFFFF")
-    static let metricBorder = Color(lightHex: "15000000", darkHex: "2BFFFFFF")
+    static let listSurfaceTint = Color.clear
+    static let listBorder = Color(lightHex: "18000000", darkHex: "26FFFFFF")
+    static let listDivider = Color(lightHex: "12000000", darkHex: "1AFFFFFF")
+    static let sectionSurface = Color(lightHex: "05000000", darkHex: "0AFFFFFF")
+    static let rowHoverSurface = Color(lightHex: "0B000000", darkHex: "12FFFFFF")
+    static let rowHoverBorder = Color(lightHex: "0D000000", darkHex: "18FFFFFF")
+    static let activeRowSurface = Color(lightHex: "0D30D158", darkHex: "1230D158")
+    static let activeRowBorder = Color(lightHex: "1C30D158", darkHex: "2630D158")
+    static let metricSurface = Color(lightHex: "10000000", darkHex: "14FFFFFF")
+    static let metricBorder = Color(lightHex: "10000000", darkHex: "20FFFFFF")
     static let warningSurface = Color(lightHex: "14FF9F0A", darkHex: "1FFF9F0A")
     static let warningBorder = Color(lightHex: "33914C00", darkHex: "38FF9F0A")
+    static let dangerSurface = Color(lightHex: "12FF453A", darkHex: "1FFF453A")
+    static let dangerBorder = Color(lightHex: "32B92F27", darkHex: "38FF453A")
+    static let settingsGroupSurface = Color(lightHex: "EEF0F4", darkHex: "26272D")
+    static let settingsGroupBorder = Color(lightHex: "12000000", darkHex: "22FFFFFF")
+
+    static func providerSectionSurface(for provider: AccountProvider) -> Color {
+        .clear
+    }
+
+    static func providerHeaderSurface(for provider: AccountProvider) -> Color {
+        switch provider {
+        case .codex:
+            return Color(lightHex: "0C7D6AE7", darkHex: "127D6AE7")
+        case .claude:
+            return Color(lightHex: "0CD97757", darkHex: "12D97757")
+        }
+    }
+
+    static func providerBorder(for provider: AccountProvider) -> Color {
+        switch provider {
+        case .codex:
+            return Color(lightHex: "207D6AE7", darkHex: "307D6AE7")
+        case .claude:
+            return Color(lightHex: "20D97757", darkHex: "30D97757")
+        }
+    }
+
+    static func providerText(for provider: AccountProvider) -> Color {
+        switch provider {
+        case .codex:
+            return Color(lightHex: "6752C7", darkHex: "B4A9FF")
+        case .claude:
+            return Color(lightHex: "A84F34", darkHex: "F3A184")
+        }
+    }
 
     /// Bar fill color based on % free remaining.
     static func barColor(for pct: Double) -> Color {
@@ -374,12 +535,12 @@ struct Theme {
     /// Workspace chip background.
     static func workspaceColor(for ws: String) -> Color {
         let hex = workspaceHex(for: ws)
-        return Color(lightHex: "24\(hex)", darkHex: "35\(hex)")
+        return Color(lightHex: "18\(hex)", darkHex: "26\(hex)")
     }
 
     static func workspaceBorderColor(for ws: String) -> Color {
         let hex = workspaceHex(for: ws)
-        return Color(lightHex: "35\(hex)", darkHex: "48\(hex)")
+        return Color(lightHex: "26\(hex)", darkHex: "38\(hex)")
     }
 
     /// Keep chip labels colorful while darkening or lightening the accent for contrast.
@@ -501,6 +662,10 @@ private extension NSColor {
 
 struct ResetFormatter {
     private static let weekdaysShort = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    private static let monthsShort = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ]
 
     /// Weekly exhausted row: "resets Wed 18:19" because reset is the only actionable info.
     static func formatReset(seconds: Double) -> String {
@@ -574,16 +739,17 @@ struct ResetFormatter {
         "\(dateString(target: target, now: now)) \(time)"
     }
 
-    private static func dateString(target: Date, now: Date) -> String {
+    static func dateString(target: Date, now: Date) -> String {
         let cal = Calendar.current
         let d = cal.component(.day, from: target)
         let m = cal.component(.month, from: target)
         let y = cal.component(.year, from: target)
         let yNow = cal.component(.year, from: now)
+        let month = monthsShort[max(0, min(monthsShort.count - 1, m - 1))]
         if y == yNow {
-            return String(format: "%02d/%02d", d, m)
+            return "\(month) \(d)"
         }
-        return String(format: "%02d/%02d/%d", d, m, y)
+        return "\(month) \(d), \(y)"
     }
 
     /// Full tooltip string.
@@ -610,13 +776,49 @@ struct ResetFormatter {
 }
 
 struct PlanCycleFormatter {
-    static func daysText(for account: Account) -> String? {
-        guard let days = account.planDaysRemaining else { return nil }
-        return "\(days)D"
+    static func relativeText(for date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: date)).day ?? 0
+        switch days {
+        case ..<0: return "Date passed"
+        case 0: return "Today"
+        case 1: return "Tomorrow"
+        default: return "In \(days) days"
+        }
     }
 
-    static func tooltip(for date: Date) -> String {
-        "Plan renews \(ResetFormatter.fullTooltip(date: date))"
+    static func tooltip(for date: Date, label: String = "Renews") -> String {
+        "\(label) \(ResetFormatter.fullTooltip(date: date))"
+    }
+}
+
+struct BankedResetFormatter {
+    static func compactCountLabel(_ count: Int?) -> String {
+        guard let count else { return "Banked resets unavailable" }
+        return "\(count) banked reset\(count == 1 ? "" : "s")"
+    }
+
+    static func compactExpiration(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter.string(from: date)
+    }
+
+
+    static func countLabel(_ count: Int?) -> String {
+        guard let count else { return "BANKED RESETS UNAVAILABLE" }
+        return "\(count) BANKED RESET\(count == 1 ? "" : "S")"
+    }
+
+    static func expiration(
+        _ date: Date,
+        timeZone: TimeZone = .current
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "MMM d, yyyy 'at' h:mm a z"
+        return formatter.string(from: date)
     }
 }
 

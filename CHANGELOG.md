@@ -2,6 +2,82 @@
 
 All notable changes to Codex Vitals will be documented here.
 
+## Unreleased
+
+- Renamed the account action to Switch and dimmed the complete Waiting for reset group to 80% opacity.
+
+- Rebuilt the personal macOS interface around borderless rows, a plain title, single plan badges, stacked quota bars, and visible Switch controls.
+- Removed studio promotion and the GitHub-star interruption; clarified the official update source and linked the KeystoneScience fork.
+- Distinguished billing renewal from subscription expiration, ignored discount expiration as billing evidence, and stopped copying dates by workspace display name.
+- Added calendar-day countdowns and manual update installation for marked personal builds.
+
+- Allowed authenticated Codex and Claude accounts to be selected manually even when their current quota is at zero.
+- Added a separate read-only column on the far right for banked Codex usage resets, including the available count and each reset's local expiration date, time, and time zone. It contains no redemption control and never uses a reset.
+
+## 1.6.3 - 2026-09-04
+
+- Added a per-account 15-minute minimum refresh interval for Claude while preserving the selected Codex refresh interval.
+- Honored Anthropic `Retry-After` responses and kept the last successful Claude usage visible during rate limits and transient service failures.
+
+## 1.6.2 - 2026-09-02
+
+- Suppressed stale Claude credential errors when no Claude accounts are configured, while preserving authentication errors for registered Claude accounts.
+
+## 1.6.1 - 2026-09-02
+
+- Replaced ambiguous numeric reset dates such as `07/09` with clear month-name dates such as `Sep 7`.
+- Added the year only when the reset falls outside the current year, for example `Sep 7, 2027`.
+
+## 1.6.0 - 2026-08-24
+
+- Refined the header and Settings with the quieter RamterStudio family design, a reduced semi-glass toolbar, clearer card hierarchy, and `by RamterStudio` branding.
+- Moved workspace grouping and Quit out of the primary toolbar and into Settings without removing either function.
+- Added explicit Usage and Manual account order modes, preserving the existing usage-based recommendation order when Usage is selected.
+- Replaced row context-menu movement commands with drag-and-drop ordering that switches to Manual after the first successful drop.
+- Kept drag ordering separate for Codex and Claude and constrained grouped rows to their current workspace.
+- Renamed the ambiguous Priority strip to Reset Soon and replaced its flame with a clock.
+
+## 1.5.0 - 2026-08-23
+
+- Refined the macOS account list and Settings layout with clearer hierarchy, reduced glass effects, consistent typography, and tighter spacing.
+- Added adaptive quota layouts so single-window limits and full duration labels remain readable without clipping.
+- Added Claude plan detection, workspace grouping and renaming, account reordering, and optional manually entered plan renewal dates.
+- Allowed the active Claude account to be hidden from Codex Vitals without signing it out of Claude Code, while preserving explicit re-add and reconnect flows.
+- Added urgency styling for approaching plan renewal dates while keeping distant dates visually neutral.
+
+## 1.4.2 - 2026-08-22
+
+- Added optional macOS grouped notifications when an automatic refresh confirms that Codex or Claude usage limits have reset.
+- Kept reset detection on the existing refresh cycle without adding extra polling or a one-minute refresh option.
+
+## 1.4.1 - 2026-08-22
+
+- Added a one-time GitHub star invitation shown on the first user-opened menu bar popover after installing this update.
+- Added a persistent Star on GitHub link in Settings without requesting GitHub OAuth access or starring automatically.
+- Added Fable 5 weekly remaining usage and reset information as a second detail row for Claude accounts when Anthropic provides that scoped limit.
+
+## 1.4.0 - 2026-08-20
+
+- Added native Claude Code usage monitoring and manual account switching on macOS.
+- Grouped Codex and Claude accounts into compact provider sections with subtle purple and orange glass tints.
+- Added Claude account login, reauthentication, local aliases, removal, and active-account status.
+- Stored saved Claude credentials in the macOS Keychain and preserved Claude Code settings during transactional switches.
+- Added best-effort 5-hour and 7-day Claude usage windows with inactive-token refresh.
+
+## 1.3.3 - 2026-08-17
+
+- Added proactive OAuth refresh for inactive captured Codex profiles before access tokens expire.
+- Kept the active Codex identity under Codex's ownership while mirroring its live token state.
+- Added per-profile refresh coordination, bounded concurrent refreshes, retry backoff, and permanent-failure handling.
+- Preserved captured profile auth as the canonical credential source and repaired derived account caches after refresh.
+- Kept affected accounts visible with an account-level Reconnect action without requiring deletion.
+- Replaced cache remove-then-move writes with direct atomic writes to prevent stale temporary files.
+
+## 1.3.2 - 2026-08-13
+
+- Fixed account switching when the OpenAI usage response contains a blank account ID.
+- Preserved captured account UUIDs instead of treating internal profile keys as account identities.
+
 ## 1.3.1 - 2026-07-15
 
 - Reworked the header into a connected glass control group that matches the RamterStudio menu bar app family.

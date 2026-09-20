@@ -9,13 +9,29 @@ enum SanitizedScreenshotRenderer {
         let repository = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let dark = CommandLine.arguments.contains("--dark")
         let credits = CommandLine.arguments.contains("--credits")
-        let filename = credits ? (dark ? "credits-dark.png" : "credits.png") : (dark ? "screenshot-dark.png" : "screenshot.png")
+        let keepAwake = CommandLine.arguments.contains("--keep-awake-options")
+        let awakeActive = CommandLine.arguments.contains("--keep-awake-active")
+        let filename = keepAwake ? (awakeActive ? "keep-awake-on.png" : "keep-awake-off.png")
+            : credits ? (dark ? "credits-dark.png" : "credits.png") : (dark ? "screenshot-dark.png" : "screenshot.png")
         let output = repository.appendingPathComponent("docs/" + filename)
         let viewModel = UsageViewModel(resetNotificationService: ScreenshotNotificationService(), loadPersistedState: false)
         configure(viewModel)
-        let size = credits ? NSSize(width: 400, height: 140) : NSSize(width: ContentView.preferredWidth, height: 526)
+        let awakeController = KeepAwakeController(
+            makeTransport: { ScreenshotKeepAwakeTransport() }, readSleepDisabled: { false }
+        )
+        if awakeActive {
+            awakeController.start(minutes: 0)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        let size = keepAwake ? NSSize(width: 350, height: awakeActive ? 290 : 370)
+            : credits ? NSSize(width: 400, height: 140) : NSSize(width: ContentView.preferredWidth, height: 526)
         let rootView = Group {
-            if credits {
+            if keepAwake {
+                KeepAwakeOptions(controller: awakeController, minutes: 0)
+                    .padding(18)
+                    .frame(width: size.width, height: size.height, alignment: .topLeading)
+                    .background(Theme.appBackground)
+            } else if credits {
                 VStack(alignment: .leading, spacing: 14) {
                     Text(AppInfo.name).font(.system(size: 17, weight: .semibold))
                     AppCreditsView()
@@ -67,6 +83,11 @@ enum SanitizedScreenshotRenderer {
         }
         try data.write(to: output, options: .atomic)
         window.close()
+    }
+
+    private final class ScreenshotKeepAwakeTransport: KeepAwakeSessionTransport {
+        func start(duration: TimeInterval, event: @escaping (String) -> Void) { event("ACTIVE never") }
+        func stop() {}
     }
 
     private static func configure(_ viewModel: UsageViewModel) {

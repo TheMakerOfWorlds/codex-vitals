@@ -4,6 +4,10 @@ All notable changes to Codex Vitals will be documented here.
 
 ## Unreleased
 
+- Added a macOS Keep awake control with timed sessions, a Never option, verified active status, and automatic sleep restoration on timeout, app exit, or low battery.
+- Fixed the administrator-approval handoff and surfaced approval, startup, and shutdown states with actionable errors.
+- Used AM/PM for reset times and added fast individual expiration tooltips. Compact banked-reset dates omit the year and include the local time when expiring within seven days.
+
 - Updated app, package, and project credits to Keystone Science, Nathan Stone, and Jackson Stone; retained functional update/credential identifiers and open-source license notices.
 
 - Renamed the account action to Switch and dimmed the complete Waiting for reset group to 80% opacity.

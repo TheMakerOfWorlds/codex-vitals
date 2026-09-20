@@ -357,6 +357,58 @@ final class AccountListVisibilityTests: XCTestCase {
         XCTAssertEqual(BankedResetFormatter.countLabel(2), "2 BANKED RESETS")
     }
 
+    func testResetTimesUseAMPMAtMidnightNoonAndAfternoon() {
+        let zone = TimeZone(secondsFromGMT: 0)!
+        for (timestamp, expected) in [
+            ("2026-09-18T00:05:00Z", "12:05 AM"),
+            ("2026-09-18T09:07:00Z", "9:07 AM"),
+            ("2026-09-18T12:00:00Z", "12:00 PM"),
+            ("2026-09-18T23:09:00Z", "11:09 PM"),
+        ] {
+            let date = ISO8601DateFormatter().date(from: timestamp)!
+            XCTAssertEqual(ResetFormatter.timeText(date, timeZone: zone), expected)
+        }
+    }
+
+    func testCompactBankedExpirationShowsLocalTimeWithinSevenDays() {
+        let now = ISO8601DateFormatter().date(from: "2026-09-20T06:00:00Z")!
+        let denver = TimeZone(identifier: "America/Denver")!
+        for (timestamp, expected) in [
+            ("2026-09-20T06:00:00Z", "Sep 20 at 12:00 AM"),
+            ("2026-09-22T05:09:00Z", "Sep 21 at 11:09 PM"),
+            ("2026-09-27T06:00:00Z", "Sep 27 at 12:00 AM"),
+            ("2026-09-27T06:00:01Z", "Sep 27"),
+            ("2026-10-18T16:30:00Z", "Oct 18"),
+        ] {
+            let date = ISO8601DateFormatter().date(from: timestamp)!
+            XCTAssertEqual(BankedResetFormatter.compactExpiration(date, now: now, timeZone: denver), expected)
+        }
+    }
+
+    func testCompactBankedExpirationOmitsYearAcrossNewYear() {
+        let now = ISO8601DateFormatter().date(from: "2026-12-30T12:00:00Z")!
+        let date = ISO8601DateFormatter().date(from: "2027-01-01T18:45:00Z")!
+        let zone = TimeZone(secondsFromGMT: 0)!
+        XCTAssertEqual(
+            BankedResetFormatter.compactExpiration(date, now: now, timeZone: zone),
+            "Jan 1 at 6:45 PM"
+        )
+        XCTAssertEqual(BankedResetFormatter.expiration(date, timeZone: zone), "Jan 1, 2027 at 6:45 PM GMT")
+    }
+
+    func testResetTooltipIncludesYearMinuteAndLocalTimeZone() {
+        let date = ISO8601DateFormatter().date(from: "2026-09-21T23:09:00Z")!
+        let zone = TimeZone(identifier: "America/Los_Angeles")!
+        XCTAssertEqual(
+            ResetFormatter.fullTooltip(date: date, timeZone: zone),
+            "Monday, September 21, 2026 at 4:09 PM PDT"
+        )
+        XCTAssertEqual(
+            BankedResetFormatter.expiration(date, timeZone: zone),
+            "Sep 21, 2026 at 4:09 PM PDT"
+        )
+    }
+
     @MainActor
     func testRefreshPreservesMatchingRecentBankedResetDetails() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)

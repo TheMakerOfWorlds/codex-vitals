@@ -27,9 +27,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         setupStatusItem()
         setupPopover()
         viewModel.refresh()
+        if let index = CommandLine.arguments.firstIndex(of: "--keep-awake-minutes"),
+           CommandLine.arguments.indices.contains(index + 1),
+           let minutes = Int(CommandLine.arguments[index + 1]), (0...720).contains(minutes) {
+            KeepAwakeController.shared.start(minutes: minutes)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        KeepAwakeController.shared.stop()
         _ = authMirrorService.syncActiveAuth()
         authMirrorService.stop()
     }

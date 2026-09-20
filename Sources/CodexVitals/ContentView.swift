@@ -142,6 +142,7 @@ struct HeaderView: View {
             }
 
             if !isShowingSettings {
+                KeepAwakeControl(controller: .shared)
                 toolbarControls
             }
         }

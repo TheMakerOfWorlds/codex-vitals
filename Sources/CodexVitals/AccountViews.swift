@@ -930,8 +930,14 @@ struct BankedResetListView: View {
             if count == nil {
                 detailText("Temporarily unavailable")
             } else if let count, count > 0 {
-                ForEach(Array(displayedExpirations.enumerated()), id: \.offset) { _, date in
-                    detailText("Expires \(BankedResetFormatter.compactExpiration(date))")
+                TimelineView(.periodic(from: .now, by: 60)) { timeline in
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(displayedExpirations.enumerated()), id: \.offset) { _, date in
+                            detailText("Expires \(BankedResetFormatter.compactExpiration(date, now: timeline.date))")
+                                .background(FastTooltip(text: "Expires \(BankedResetFormatter.expiration(date))"))
+                                .accessibilityLabel("Banked reset expires \(BankedResetFormatter.expiration(date))")
+                        }
+                    }
                 }
                 if missingExpirationCount > 0 {
                     detailText(displayedExpirations.isEmpty ? "Expiration unavailable" : "+\(missingExpirationCount) expiration unknown")
@@ -939,8 +945,7 @@ struct BankedResetListView: View {
             }
         }
         .frame(width: width, alignment: .leading)
-        .help(accessibilityText)
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityText)
     }
 

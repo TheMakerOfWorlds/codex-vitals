@@ -8,9 +8,12 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4")
     ],
     targets: [
+        .target(name: "KeepAwakeCore"),
+        .executableTarget(name: "CodexVitalsKeepAwake", dependencies: ["KeepAwakeCore"]),
         .executableTarget(
             name: "CodexVitals",
             dependencies: [
+                "KeepAwakeCore",
                 .product(name: "Sparkle", package: "Sparkle")
             ],
             path: "Sources/CodexVitals",
@@ -21,6 +24,6 @@ let package = Package(
                 ])
             ]
         ),
-        .testTarget(name: "CodexVitalsTests", dependencies: ["CodexVitals"])
+        .testTarget(name: "CodexVitalsTests", dependencies: ["CodexVitals", "KeepAwakeCore"])
     ]
 )

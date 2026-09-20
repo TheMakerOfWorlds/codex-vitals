@@ -667,7 +667,7 @@ struct ResetFormatter {
         "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
     ]
 
-    /// Weekly exhausted row: "resets Wed 18:19" because reset is the only actionable info.
+    /// Weekly exhausted row: "resets Wed 6:19 PM" because reset is the only actionable info.
     static func formatReset(seconds: Double) -> String {
         let inner = format(seconds: seconds)
         if inner == "now" { return "resets now" }
@@ -680,7 +680,7 @@ struct ResetFormatter {
         let now = Date()
         let tgt = now.addingTimeInterval(seconds)
         let cal = Calendar.current
-        let t   = hhmm(tgt)
+        let t   = timeText(tgt)
         if cal.isDateInToday(tgt) { return t }
         if cal.isDateInTomorrow(tgt) { return "tomorrow \(t)" }
         if isSameWeekStartingSunday(now, tgt) {
@@ -695,7 +695,7 @@ struct ResetFormatter {
         let now = Date()
         let tgt = now.addingTimeInterval(seconds)
         let cal = Calendar.current
-        let t = hhmm(tgt)
+        let t = timeText(tgt)
         if cal.isDateInToday(tgt) { return "today \(t)" }
         if cal.isDateInTomorrow(tgt) { return "tomorrow \(t)" }
         return dateTimeString(target: tgt, now: now, time: t)
@@ -703,7 +703,7 @@ struct ResetFormatter {
 
     static func timeOnly(seconds: Double) -> String {
         guard seconds > 0 else { return "now" }
-        return hhmm(Date().addingTimeInterval(seconds))
+        return timeText(Date().addingTimeInterval(seconds))
     }
 
     static func compact(seconds: Double) -> String {
@@ -711,7 +711,7 @@ struct ResetFormatter {
         let now = Date()
         let tgt = now.addingTimeInterval(seconds)
         let cal = Calendar.current
-        let t = hhmm(tgt)
+        let t = timeText(tgt)
         if cal.isDateInToday(tgt) { return t }
         if cal.isDateInTomorrow(tgt) { return "tmr \(t)" }
         if isSameWeekStartingSunday(now, tgt) {
@@ -756,23 +756,24 @@ struct ResetFormatter {
     static func fullTooltip(seconds: Double) -> String {
         guard seconds > 0 else { return "Now" }
         let tgt = Date().addingTimeInterval(seconds)
-        return tooltipFormatter.string(from: tgt)
+        return fullTooltip(date: tgt)
     }
 
-    static func fullTooltip(date: Date) -> String {
-        tooltipFormatter.string(from: date)
+    static func fullTooltip(date: Date, timeZone: TimeZone = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a z"
+        return formatter.string(from: date)
     }
 
-    private static func hhmm(_ d: Date) -> String {
-        let f = DateFormatter(); f.dateFormat = "HH:mm"; return f.string(from: d)
+    static func timeText(_ date: Date, timeZone: TimeZone = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: date)
     }
-
-    private static let tooltipFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "EEEE, MMMM d 'at' HH:mm"
-        return f
-    }()
 }
 
 struct PlanCycleFormatter {
@@ -797,10 +798,18 @@ struct BankedResetFormatter {
         return "\(count) banked reset\(count == 1 ? "" : "s")"
     }
 
-    static func compactExpiration(_ date: Date) -> String {
+    static func compactExpiration(
+        _ date: Date,
+        now: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "MMM d, yyyy"
+        formatter.timeZone = timeZone
+        let remaining = date.timeIntervalSince(now)
+        formatter.dateFormat = (0...(7 * 24 * 60 * 60)).contains(remaining)
+            ? "MMM d 'at' h:mm a"
+            : "MMM d"
         return formatter.string(from: date)
     }
 

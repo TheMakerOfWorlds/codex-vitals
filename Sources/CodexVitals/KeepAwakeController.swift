@@ -41,9 +41,8 @@ final class KeepAwakeController: ObservableObject {
         switch phase {
         case .off:
             switch systemSleepDisabled {
-            case true: return "On elsewhere"
-            case false: return "Off"
-            case nil: return "Status unknown"
+            case .some(let disabled): return disabled ? "On elsewhere" : "Off"
+            case .none: return "Status unknown"
             }
         case .starting: return startingDetail == "Waiting for macOS approval…" ? "Waiting for approval…" : "Starting…"
         case .active:

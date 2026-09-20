@@ -1,9 +1,16 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>Codex Vitals Updates</title>
-    <link>https://github.com/TheMakerOfWorlds/codex-vitals</link>
-    <description>Signed updates published by TheMakerOfWorlds/codex-vitals.</description>
-    <language>en</language>
-  </channel>
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>CodexVitals</title>
+        <item>
+            <title>1.6.4.2</title>
+            <pubDate>Sun, 20 Sep 2026 21:11:54 +0000</pubDate>
+            <link>https://github.com/TheMakerOfWorlds/codex-vitals</link>
+            <sparkle:fullReleaseNotesLink>https://github.com/TheMakerOfWorlds/codex-vitals/releases/tag/v1.6.4.2</sparkle:fullReleaseNotesLink>
+            <sparkle:version>1.6.4.2</sparkle:version>
+            <sparkle:shortVersionString>1.6.4.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/TheMakerOfWorlds/codex-vitals/releases/download/v1.6.4.2/CodexVitals-1.6.4.2.zip" length="4145592" type="application/octet-stream" sparkle:edSignature="9UL/RCFV0tYJWhtpN9AGTamEZyNUA8Y9mJkSTn4OO2xWiIiOxjvNHOJ2MJQAjpPB9q+5yM2mbDpKKFXiQ5KADA=="/>
+        </item>
+    </channel>
 </rss>

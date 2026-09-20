@@ -1,6 +1,6 @@
 # Personal macOS builds
 
-This branch combines upstream Codex Vitals 1.6.3 with a borderless personal interface, explicit account switching, and informational banked-reset details.
+This branch combines upstream Codex Vitals 1.6.3 with a borderless personal interface, explicit account switching, informational banked-reset details, and a macOS Keep awake control.
 
 ## Build and verify
 
@@ -33,7 +33,9 @@ The feed points to signed upstream GitHub Releases. The original public verifica
 - Persistent Switch button with a larger target. Authenticated exhausted accounts remain switchable.
 - Entire Waiting for reset group at 80% opacity, including its header and rows.
 - Stacked quota bars with reset icons beside their reset times.
-- Informational banked-reset counts and expiry dates; exact local time and zone on hover and in accessibility text. No redemption control.
+- Informational banked-reset counts and expiry dates without the year. Expirations within seven days also display the local time with AM/PM. Fast individual tooltips and accessibility text retain the full date, minute, and time zone. No redemption control.
+- Keep awake supports timed sessions and Never, with explicit approval, startup, active, and shutdown states. Active status is confirmed against the system sleep setting. Never removes the timer; sleep is still restored when the app exits or a discharging battery reaches 15%.
+- A bundled privileged helper requests macOS administrator approval, restores sleep on timeout or connection loss, and reports activation errors directly in the app.
 - Explicit Renews versus Plan ends, with distinct icons; neutral Cycle ends for older metadata without provenance.
 - Discount expiry is not treated as renewal. Dates are not copied between accounts based on matching workspace display names.
 - Calendar-day countdowns distinguish Today, Tomorrow, and Date passed.
@@ -41,10 +43,10 @@ The feed points to signed upstream GitHub Releases. The original public verifica
 
 ## Validation
 
-- 101 Swift tests passed, including duplicate-plan display, date provenance, calendar-day countdown, and exhausted-account switching cases.
+- 125 Swift tests and 40 Windows unit tests passed, including expiry formatting at the seven-day boundary, AM/PM and time-zone formatting, keep-awake lifecycle and restoration, and authenticated exhausted-account switching.
 - Light and dark SwiftUI renderings reviewed.
 - Release build and strict code-signing verification passed.
-- The installed executable matched the release build, and live usage refreshed successfully.
+- A one-minute administrator-approved keep-awake session confirmed that the system sleep setting became active and returned to normal at expiry. Physical lid-closed behavior was not independently tested.
 - Native Foundation networking returned HTTP 200 for the RSS update feed.
 - Native UI inspection timed out; visual verification used the app renderer, with installation and live refresh verified separately.
 
@@ -54,4 +56,4 @@ Screenshots contain sample accounts. Private local paths, installation logs, and
 
 App credits, bundled CREDITS.txt, package metadata, and project pages identify Keystone Science, Nathan Stone, and Jackson Stone. The header remains plain Codex Vitals. The existing signed update feed, credential-storage identifiers, package identities, and inherited open-source license notices remain stable.
 
-The same release has been installed on two Macs with their existing accounts retained separately. Local validation includes 101 Swift tests and 40 Windows unit tests, plus the light and dark credit renders in `docs/credits.png` and `docs/credits-dark.png`.
+Light and dark credit renders are available in `docs/credits.png` and `docs/credits-dark.png`. Existing account storage and active sign-ins are retained across app updates.

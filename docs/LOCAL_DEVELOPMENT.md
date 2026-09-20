@@ -56,11 +56,12 @@ Automatic checks and installation are enabled once when migrating from the old f
 
 ## Validation
 
-- 125 Swift tests and 40 Windows unit tests passed, including expiry formatting at the seven-day boundary, AM/PM and time-zone formatting, keep-awake lifecycle and restoration, and authenticated exhausted-account switching.
+- 127 Swift tests and 40 Windows unit tests passed locally and on GitHub's release runners, including update-preference migration, expiry formatting, keep-awake lifecycle and restoration, and authenticated exhausted-account switching.
 - Light and dark SwiftUI renderings reviewed.
 - Release build and strict code-signing verification passed.
 - A one-minute administrator-approved keep-awake session confirmed that the system sleep setting became active and returned to normal at expiry. Physical lid-closed behavior was not independently tested.
-- Native Foundation networking returned HTTP 200 for the RSS update feed.
+- The automatic publishing workflow released `v1.6.4.2` and updated this repository's live feed. The installed `1.6.4.0` bootstrap build downloaded that release through Sparkle, verified its Ed25519 signature, installed it on quit, and relaunched as `1.6.4.2`. Active Codex authentication remained unchanged.
+- Independent verification rejected a modified archive and a feed pointing to another repository. Feed-publication checks confirmed that retries and older releases do not regress the feed.
 - Native UI inspection timed out; visual verification used the app renderer, with installation and live refresh verified separately.
 
 Screenshots contain sample accounts. Private local paths, installation logs, and account data are excluded from this document.

@@ -16,7 +16,7 @@ $appcastPath = Join-Path $releaseRoot "windows-appcast.xml"
 $releaseNotesPath = Join-Path $releaseRoot "windows-release-notes.md"
 
 if ([string]::IsNullOrWhiteSpace($PrivateKeyPath)) {
-    $PrivateKeyPath = Join-Path $env:APPDATA "RamterStudio\ReleaseKeys\CodexVitals\windows-update-private.key"
+    $PrivateKeyPath = Join-Path $env:APPDATA "CodexVitals\ReleaseKeys\windows-update-private.key"
 }
 if (-not (Test-Path -LiteralPath $PrivateKeyPath)) {
     throw "Windows update signing key was not found: $PrivateKeyPath"
@@ -65,8 +65,8 @@ if (-not $signatureMatch.Success) {
 $signature = $signatureMatch.Groups[1].Value
 $length = $signatureMatch.Groups[2].Value
 $releaseTag = "windows-v$Version"
-$downloadUrl = "https://github.com/Joowonoil/Codex-Vitals/releases/download/$releaseTag/$installerName"
-$releaseNotesUrl = "https://github.com/Joowonoil/Codex-Vitals/releases/tag/$releaseTag"
+$downloadUrl = "https://github.com/TheMakerOfWorlds/codex-vitals/releases/download/$releaseTag/$installerName"
+$releaseNotesUrl = "https://github.com/TheMakerOfWorlds/codex-vitals/releases/tag/$releaseTag"
 $publicationDate = [DateTime]::UtcNow.ToString("r", [Globalization.CultureInfo]::InvariantCulture)
 
 @"
@@ -74,7 +74,7 @@ $publicationDate = [DateTime]::UtcNow.ToString("r", [Globalization.CultureInfo]:
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
     <title>Codex Vitals Windows Updates</title>
-    <link>https://ramterstudio.com/codex-vitals/windows-appcast.xml</link>
+    <link>https://raw.githubusercontent.com/TheMakerOfWorlds/codex-vitals/main/updates/windows-appcast.xml</link>
     <description>Codex Vitals updates for the direct Windows release.</description>
     <language>en</language>
     <item>
@@ -106,7 +106,7 @@ Initial public Windows release.
 - Keep local sessions and saved accounts on the device.
 - Check for signed updates automatically or from Settings.
 
-Windows may show a Microsoft Defender SmartScreen warning because this direct installer is not code-signed yet. Choose **More info** and then **Run anyway** only when the installer was downloaded from this official GitHub release or ramterstudio.com.
+Windows may show a Microsoft Defender SmartScreen warning because this direct installer is not code-signed yet. Choose **More info** and then **Run anyway** only when the installer was downloaded from this official GitHub release.
 "@ | Set-Content -LiteralPath $releaseNotesPath -Encoding UTF8
 
 Write-Output $installerPath

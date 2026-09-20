@@ -161,16 +161,11 @@ struct SettingsView: View {
     private var updateSettings: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Signed upstream releases")
+                Text("Updates from your repository")
                     .font(.system(size: 11, weight: .medium))
-                Text("Update checks use the original signed release feed.")
+                Text("TheMakerOfWorlds/codex-vitals")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
-                if AppInfo.isPersonalBuild {
-                    Text("Personal build: install updates manually to preserve your custom design.")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
@@ -198,7 +193,7 @@ struct SettingsView: View {
                 .toggleStyle(.switch)
                 .controlSize(.mini)
                 .tint(Theme.brandAccent)
-                .disabled(AppInfo.isPersonalBuild || !appUpdater.automaticallyChecksForUpdates)
+                .disabled(!appUpdater.automaticallyChecksForUpdates)
             }
 
             settingsDivider

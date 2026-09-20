@@ -7,7 +7,8 @@
 #   BUNDLE_ID     CFBundleIdentifier.
 #   VERSION       CFBundleShortVersionString and CFBundleVersion.
 #   INSTALL_APPS  If 1, copies the generated app to /Applications.
-#   PERSONAL_BUILD If 1, keeps update checks but requires manual installation.
+#   PERSONAL_BUILD If 1, adds a Personal label; updates still use this repository.
+#   UNIVERSAL     If 1, builds for both Apple Silicon and Intel.
 #   SIGN_IDENTITY Code signing identity. Defaults to ad-hoc signing (-).
 #
 # Usage:
@@ -35,10 +36,14 @@ if [[ ! -f "$ICNS" ]]; then
 	"${ROOT}/Support/make-icns.sh"
 fi
 
-echo "swift build -c release ..."
-swift build -c release
+BUILD_ARGS=(-c release)
+if [[ "${UNIVERSAL:-0}" == "1" ]]; then
+    BUILD_ARGS+=(--arch arm64 --arch x86_64)
+fi
+echo "swift build ${BUILD_ARGS[*]} ..."
+swift build "${BUILD_ARGS[@]}"
 
-BIN_DIR="$(swift build -c release --show-bin-path)"
+BIN_DIR="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)"
 EXE="${BIN_DIR}/CodexVitals"
 SPARKLE_FRAMEWORK="${ROOT}/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 if [[ ! -x "$EXE" ]]; then
@@ -78,7 +83,6 @@ PLIST="${OUT}/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION}" "$PLIST"
 if [[ "${PERSONAL_BUILD:-0}" == "1" ]]; then
     /usr/libexec/PlistBuddy -c "Add :CodexVitalsPersonalBuild bool true" "$PLIST"
-    /usr/libexec/PlistBuddy -c "Set :SUAutomaticallyUpdate false" "$PLIST"
 fi
 
 

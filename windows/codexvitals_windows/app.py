@@ -39,9 +39,9 @@ from .update_manager import UpdateManager, UpdateManagerError
 
 APP_DISPLAY_NAME = "Codex Vitals"
 APP_INTERNAL_NAME = "CodexVitals"
-HOMEPAGE_URL = "https://github.com/KeystoneScience/codex-vitals"
-GITHUB_URL = "https://github.com/KeystoneScience/codex-vitals"
-FEEDBACK_URL = "https://github.com/KeystoneScience/codex-vitals/issues"
+HOMEPAGE_URL = "https://github.com/TheMakerOfWorlds/codex-vitals"
+GITHUB_URL = "https://github.com/TheMakerOfWorlds/codex-vitals"
+FEEDBACK_URL = "https://github.com/TheMakerOfWorlds/codex-vitals/issues"
 
 
 @dataclass(slots=True)

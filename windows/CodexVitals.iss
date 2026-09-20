@@ -4,7 +4,7 @@
 
 #define MyAppName "Codex Vitals"
 #define MyAppPublisher "Keystone Science"
-#define MyAppURL "https://github.com/KeystoneScience/codex-vitals"
+#define MyAppURL "https://github.com/TheMakerOfWorlds/codex-vitals"
 #define MyAppExeName "CodexVitals.exe"
 
 [Setup]

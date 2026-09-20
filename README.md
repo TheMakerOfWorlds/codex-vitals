@@ -8,8 +8,8 @@ See [personal macOS builds](docs/LOCAL_DEVELOPMENT.md) for build commands, updat
   <img src="https://img.shields.io/badge/platform-macOS%2013+-000000?logo=apple" alt="macOS 13+">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows11" alt="Windows 10/11">
   <img src="https://img.shields.io/badge/swift-5.9-F05138?logo=swift" alt="Swift 5.9">
-  <a href="https://github.com/Joowonoil/Codex-Vitals/releases/latest">
-    <img src="https://img.shields.io/github/downloads/Joowonoil/Codex-Vitals/total?label=downloads&logo=github" alt="GitHub release downloads">
+  <a href="https://github.com/TheMakerOfWorlds/codex-vitals/releases/latest">
+    <img src="https://img.shields.io/github/downloads/TheMakerOfWorlds/codex-vitals/total?label=downloads&logo=github" alt="GitHub release downloads">
   </a>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT">
 </p>
@@ -19,9 +19,9 @@ See [personal macOS builds](docs/LOCAL_DEVELOPMENT.md) for build commands, updat
 </p>
 
 <p align="center">
-  <a href="https://github.com/Joowonoil/Codex-Vitals/releases/download/v1.6.3/CodexVitals-1.6.3.dmg"><strong>Download for macOS</strong></a>
+  <a href="https://github.com/TheMakerOfWorlds/codex-vitals/releases/latest"><strong>Download for macOS</strong></a>
   &nbsp;&nbsp;·&nbsp;&nbsp;
-  <a href="https://github.com/Joowonoil/Codex-Vitals/releases/download/windows-v1.0.0/CodexVitals-Windows-1.0.0-Setup.exe"><strong>Download for Windows</strong></a>
+  <a href="https://github.com/TheMakerOfWorlds/codex-vitals/blob/main/windows/README.md"><strong>Build for Windows</strong></a>
 </p>
 
 <p align="center">
@@ -99,18 +99,18 @@ Choose **Usage** in Settings to keep the best account to use now near the top, o
 
 ### macOS
 
-Download the latest `.pkg` from [Releases](../../releases), double-click to run the installer, and Codex Vitals will be installed to `/Applications`.
+Download the latest macOS ZIP from [your repository’s Releases](https://github.com/TheMakerOfWorlds/codex-vitals/releases/latest), unzip it, and place `CodexVitals.app` in `/Applications`. These personal builds use ad-hoc macOS code signing and are not Apple-notarized. Updates are independently signed with this repository’s Ed25519 release key.
 
 To add a Claude account, open Codex Vitals, choose the account-add button, and select **Add Claude Account**. The app starts the official `claude auth login` browser flow, then stores that account's saved credential in its own macOS Keychain service. Switching remains a manual action; Codex Vitals does not automatically rotate accounts.
 
 ### Windows
 
-Download [`CodexVitals-Windows-1.0.0-Setup.exe`](https://github.com/Joowonoil/Codex-Vitals/releases/download/windows-v1.0.0/CodexVitals-Windows-1.0.0-Setup.exe) and run it. The current direct installer is not Authenticode-signed, so Microsoft Defender SmartScreen may show a warning. Choose **More info** and **Run anyway** only for the installer downloaded from this repository or [ramterstudio.com](https://ramterstudio.com/codex-vitals/).
+Windows source is included; see [Windows build instructions](windows/README.md). A Windows release has not yet been published from this repository. The Windows updater points exclusively to this repository’s Windows feed.
 
 ### Build From Source
 
 ```bash
-git clone https://github.com/KeystoneScience/codex-vitals.git
+git clone https://github.com/TheMakerOfWorlds/codex-vitals.git
 cd codex-vitals
 swift test
 swift build
@@ -131,11 +131,13 @@ The installer will be created at `dist/CodexVitals-<version>.pkg`.
 
 Windows build and installer instructions are in [windows/README.md](windows/README.md).
 
-Sparkle release feeds are generated after a signed and notarized DMG is ready:
+### Automatic macOS updates
 
-```bash
-scripts/prepare-sparkle-update.sh <version> dist/CodexVitals-<version>.dmg [release-notes.md]
-```
+This app checks only `TheMakerOfWorlds/codex-vitals`. Runtime/build changes pushed to `main` run Swift and Windows tests, build a universal Mac app, sign the ZIP with the repository's release key, publish a versioned GitHub release, then update `updates/appcast.xml`. Documentation-only and generated-feed commits do not publish another binary.
+
+Automatic checks run hourly; automatic downloads and installation on quit are enabled. Both choices remain adjustable in Settings. Moving from the older personal build enables them once, then preserves later user choices.
+
+The signing key stays in the release Mac's Keychain and the repository's `SPARKLE_PRIVATE_KEY` Actions secret. Never commit the private key. See [release maintenance](docs/LOCAL_DEVELOPMENT.md) for manual signing and verification.
 
 ## Data & Privacy
 
@@ -167,8 +169,8 @@ The app uses your local Codex/OpenAI auth tokens to query:
 - `https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27`
 - `https://auth.openai.com/oauth/authorize`
 - `https://auth.openai.com/oauth/token`
-- `https://ramterstudio.com/codex-vitals/appcast.xml` for application update metadata
-- `https://ramterstudio.com/codex-vitals/windows-appcast.xml` for direct Windows update metadata
+- `https://raw.githubusercontent.com/TheMakerOfWorlds/codex-vitals/main/updates/appcast.xml` for application update metadata
+- `https://raw.githubusercontent.com/TheMakerOfWorlds/codex-vitals/main/updates/windows-appcast.xml` for direct Windows update metadata
 - GitHub Releases for signed application update downloads
 
 For Claude support on macOS, the app uses the official Claude Code CLI for interactive browser login, Anthropic's OAuth usage endpoint for quota reads, and Anthropic's OAuth token endpoint to refresh expiring inactive saved accounts. Manual switching updates Claude Code's local active credential and only the `oauthAccount` field in `~/.claude.json`, then verifies the result or rolls it back.
@@ -182,7 +184,7 @@ The banked-reset endpoint is queried with `GET` only. Codex Vitals displays the 
 
 Automatic usage refresh defaults to 10 minutes. Account metadata is cached for 6 hours during automatic refreshes. Manual refresh requests fresh Codex usage and metadata immediately; Claude usage remains limited to once per account every 15 minutes and honors Anthropic `Retry-After` responses while retaining the last successful reading.
 
-Application update checks are separate from account refreshes. Sparkle and WinSparkle check at most once every 24 hours by default, and automatic checks can be changed in Settings. Microsoft Store builds leave updates to the Store.
+Application update checks are separate from account refreshes. Sparkle checks hourly and WinSparkle checks daily by default, and automatic checks can be changed in Settings. Microsoft Store builds leave updates to the Store.
 
 ### Security
 

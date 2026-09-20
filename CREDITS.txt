@@ -3,6 +3,6 @@ Codex Vitals
 Keystone Science
 Nathan Stone and Jackson Stone
 
-Project: https://github.com/KeystoneScience/codex-vitals
+Project: https://github.com/TheMakerOfWorlds/codex-vitals
 
 Open-source license notices are provided in LICENSE and THIRD-PARTY-NOTICES.txt.

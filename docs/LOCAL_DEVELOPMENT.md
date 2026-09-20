@@ -12,18 +12,31 @@ PERSONAL_BUILD=1 ./build-app.sh
 codesign --verify --deep --strict dist/CodexVitals.app
 ```
 
-`PERSONAL_BUILD=1` marks the app as personal and keeps official update checks available while requiring manual update installation. Official updates replace local customizations. Merge upstream changes and rebuild when preserving the personal design. Omit the flag for normal upstream automatic-install behavior.
+`PERSONAL_BUILD=1` only adds a Personal label. It does not disable this repository's updater. `UNIVERSAL=1` builds both Apple Silicon and Intel. `VERSION=1.6.4.0` overrides the bundle version for a local bootstrap build.
 
-The app uses the existing bundle identifier and account storage. The screenshot renderer uses sample accounts without fetching usage or switching accounts.
+The existing bundle identifier, account storage, and active authentication are preserved.
 
-## Sources and updates
+## Canonical repository and release maintenance
 
-- Upstream: https://github.com/Joowonoil/Codex-Vitals
-- Contributor fork: https://github.com/TheMakerOfWorlds/codex-vitals
-- Target fork: https://github.com/KeystoneScience/codex-vitals
-- Sparkle feed: https://ramterstudio.com/codex-vitals/appcast.xml
+Use **https://github.com/TheMakerOfWorlds/codex-vitals** for changes, releases, project links, and update downloads. The original project is only a source reference; neither its release feed nor the KeystoneScience fork is an update source.
 
-The feed points to signed upstream GitHub Releases. The original public verification key and verification-before-extraction remain enabled. At verification, KeystoneScience had no published releases, so its project link is separate from the official update source.
+- macOS feed: `https://raw.githubusercontent.com/TheMakerOfWorlds/codex-vitals/main/updates/appcast.xml`
+- Windows feed: `https://raw.githubusercontent.com/TheMakerOfWorlds/codex-vitals/main/updates/windows-appcast.xml`
+- macOS signing key: Sparkle Keychain account `codex-vitals.themakerofworlds`; CI uses the repository's `SPARKLE_PRIVATE_KEY` Actions secret.
+
+The Publish macOS update workflow tests code, builds a universal app, signs the archive, independently verifies its signature and repository URL, publishes a GitHub release, and only then updates the feed. Runtime/build changes on `main` publish automatically. Versions append the workflow run number to the base version in `Support/Info.plist`. Documentation and generated-feed commits do not trigger releases.
+
+For a manual archive:
+
+```bash
+VERSION=1.6.4.0 UNIVERSAL=1 ./build-app.sh
+ditto -c -k --sequesterRsrc --keepParent dist/CodexVitals.app dist/CodexVitals-1.6.4.0.zip
+scripts/prepare-sparkle-update.sh 1.6.4.0
+```
+
+Publish the immutable archive and appcast as release assets before copying the generated feed into `updates/appcast.xml`. The private key is never written to the repository. Personal builds are ad-hoc signed and are not Apple-notarized.
+
+Automatic checks and installation are enabled once when migrating from the old feed. Later user choices are preserved. The runtime delegate pins the feed to this repository even if older preferences contain another URL. Sparkle downloads verified updates automatically and installs them when the app quits; Check for Updates can install immediately.
 
 ## Interface and behavior
 

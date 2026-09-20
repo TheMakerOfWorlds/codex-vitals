@@ -1,0 +1,70 @@
+name: Publish macOS update
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'updates/**'
+      - '**/*.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-release
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    if: github.repository == 'TheMakerOfWorlds/codex-vitals'
+    uses: ./.github/workflows/test.yml
+
+  release:
+    needs: tests
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set release version
+        run: |
+          BASE_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Support/Info.plist)
+          echo "VERSION=${BASE_VERSION}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
+      - name: Build universal app
+        env:
+          UNIVERSAL: '1'
+        run: ./build-app.sh
+
+      - name: Package and sign update
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          test -n "$SPARKLE_PRIVATE_KEY"
+          ditto -c -k --sequesterRsrc --keepParent dist/CodexVitals.app "dist/CodexVitals-${VERSION}.zip"
+          scripts/prepare-sparkle-update.sh "$VERSION"
+
+      - name: Publish release before updating feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${VERSION}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # Resume a published release without replacing immutable assets.
+            test "$(git rev-list -n 1 "$TAG")" = "$GITHUB_SHA"
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern appcast.xml --dir dist/published-feed
+            cp dist/published-feed/appcast.xml dist/sparkle-appcast/appcast.xml
+          else
+            gh release create "$TAG" "dist/CodexVitals-${VERSION}.zip" dist/sparkle-appcast/appcast.xml \
+              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Codex Vitals ${VERSION}" --generate-notes
+          fi
+
+      - name: Publish repository update feed
+        run: |
+          python3 scripts/publish-update-feed.py dist/sparkle-appcast/appcast.xml

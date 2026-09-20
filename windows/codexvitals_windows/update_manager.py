@@ -10,8 +10,8 @@ from typing import Callable
 from .app_settings import APP_VERSION
 
 
-APPCAST_URL = "https://ramterstudio.com/codex-vitals/windows-appcast.xml"
-EDDSA_PUBLIC_KEY = "UZmFpP6KECwaK1HTD5G6CiEsx8m/rOAK+0ZyTMkrclk="
+APPCAST_URL = "https://raw.githubusercontent.com/TheMakerOfWorlds/codex-vitals/main/updates/windows-appcast.xml"
+EDDSA_PUBLIC_KEY = "vnw3TXixd1tWcKZnvl+LoEhAANTq2OQKBaEyegeycmI="
 UPDATE_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 DIRECT_CHANNEL = "direct"
 STORE_CHANNEL = "store"

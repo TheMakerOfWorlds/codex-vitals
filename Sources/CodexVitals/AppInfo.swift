@@ -4,9 +4,10 @@ enum AppInfo {
     static let name = "Codex Vitals"
     static let publisher = "Keystone Science"
     static let contributors = "Nathan Stone · Jackson Stone"
-    static let homepageURL = URL(string: "https://github.com/KeystoneScience/codex-vitals")!
-    static let repositoryURL = URL(string: "https://github.com/KeystoneScience/codex-vitals")!
-    static let releasesURL = URL(string: "https://github.com/Joowonoil/Codex-Vitals/releases")!
+    static let repositoryURL = URL(string: "https://github.com/TheMakerOfWorlds/codex-vitals")!
+    static let homepageURL = repositoryURL
+    static let releasesURL = repositoryURL.appendingPathComponent("releases")
+    static let updateFeedURL = URL(string: "https://raw.githubusercontent.com/TheMakerOfWorlds/codex-vitals/main/updates/appcast.xml")!
 
     static var isPersonalBuild: Bool {
         Bundle.main.object(forInfoDictionaryKey: "CodexVitalsPersonalBuild") as? Bool ?? false

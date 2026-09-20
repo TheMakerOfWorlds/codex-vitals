@@ -4,6 +4,8 @@ All notable changes to Codex Vitals will be documented here.
 
 ## Unreleased
 
+- Use TheMakerOfWorlds/codex-vitals for project links, releases, and signed update feeds. Enable automatic updates when migrating from the old personal build, and publish tested universal macOS updates automatically from main.
+
 - Added a macOS Keep awake control with timed sessions, a Never option, verified active status, and automatic sleep restoration on timeout, app exit, or low battery.
 - Fixed the administrator-approval handoff and surfaced approval, startup, and shutdown states with actionable errors.
 - Used AM/PM for reset times and added fast individual expiration tooltips. Compact banked-reset dates omit the year and include the local time when expiring within seven days.

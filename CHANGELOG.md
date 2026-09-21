@@ -4,6 +4,8 @@ All notable changes to Codex Vitals will be documented here.
 
 ## Unreleased
 
+- While macOS Keep awake is active, lower the built-in display brightness to zero when the lid closes and restore its previous level when it opens. Preserve the saved level across repeated polls and restore it before ending the session; external displays are untouched.
+
 - Use TheMakerOfWorlds/codex-vitals for project links, releases, and signed update feeds. Enable automatic updates when migrating from the old personal build, and publish tested universal macOS updates automatically from main.
 
 - Added a macOS Keep awake control with timed sessions, a Never option, verified active status, and automatic sleep restoration on timeout, app exit, or low battery.

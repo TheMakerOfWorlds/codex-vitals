@@ -24,6 +24,14 @@ public enum KeepAwakePolicy {
 }
 
 public enum KeepAwakePower {
+    public static func lidClosed() -> Bool? {
+        let entry = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
+        guard entry != 0 else { return nil }
+        defer { IOObjectRelease(entry) }
+        return IORegistryEntryCreateCFProperty(entry, "AppleClamshellState" as CFString, nil, 0)?
+            .takeRetainedValue() as? Bool
+    }
+
     /// The same kernel property controlled by Apple's `pmset disablesleep`.
     public static func sleepDisabled() -> Bool? {
         let entry = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))

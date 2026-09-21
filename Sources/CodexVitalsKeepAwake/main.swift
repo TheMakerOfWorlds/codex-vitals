@@ -33,6 +33,7 @@ func applySleepDisabled(_ disabled: Bool) -> Bool {
 
 struct SystemSessionEnvironment: KeepAwakeSessionEnvironment {
     let fd: Int32
+    let brightness = LidBrightnessSession(display: SystemBuiltInDisplayBrightness())
     var now: Date { Date() }
     var uptime: TimeInterval { ProcessInfo.processInfo.systemUptime }
     var interrupted: Bool { isInterrupted() }
@@ -41,6 +42,8 @@ struct SystemSessionEnvironment: KeepAwakeSessionEnvironment {
     func setSleepDisabled(_ disabled: Bool) -> Bool { applySleepDisabled(disabled) }
     func send(_ message: String) { KeepAwakeSocket.send(message, to: fd) }
     func waitBeforeRetry() { sleep(1) }
+    func updateDisplayBrightness() { brightness.update(lidClosed: KeepAwakePower.lidClosed()) }
+    func restoreDisplayBrightness() -> Bool { brightness.restore() }
     func waitForStop() -> String? {
         guard KeepAwakeSocket.readable(fd, milliseconds: 500) else { return nil }
         // STOP, malformed commands, and app exit all end the session. No arbitrary commands.

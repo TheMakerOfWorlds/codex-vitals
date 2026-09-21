@@ -10,6 +10,8 @@ public protocol KeepAwakeSessionEnvironment {
     func waitForStop() -> String?
     func send(_ message: String)
     func waitBeforeRetry()
+    func updateDisplayBrightness()
+    func restoreDisplayBrightness() -> Bool
 }
 
 /// The privileged session's complete lifecycle, independently testable without changing power settings.
@@ -28,6 +30,7 @@ public enum KeepAwakeSession {
         let enabled = environment.setSleepDisabled(true)
         var reason = enabled ? "stopped" : "failed"
         if enabled {
+            environment.updateDisplayBrightness()
             environment.send(deadline.map { "ACTIVE \($0.timeIntervalSince1970)" } ?? "ACTIVE never")
             while !environment.interrupted {
                 if let stop = KeepAwakePolicy.stopReason(
@@ -36,8 +39,17 @@ public enum KeepAwakeSession {
                     connected: true, batteryPercent: environment.batteryPercent
                 ) { reason = stop; break }
                 if environment.sleepDisabled != true { reason = "changed"; break }
+                environment.updateDisplayBrightness()
                 if let stop = environment.waitForStop() { reason = stop; break }
             }
+        }
+
+        // Restore before allowing lid sleep, while the panel is still addressable.
+        // Display failures must never prevent the more important sleep cleanup.
+        for attempt in 0..<3 {
+            if environment.restoreDisplayBrightness() { break }
+            if attempt == 2 { environment.send("NOTICE brightness-restore") }
+            else { environment.waitBeforeRetry() }
         }
 
         // Even a failed enable can have applied the setting. Always verify restoration.

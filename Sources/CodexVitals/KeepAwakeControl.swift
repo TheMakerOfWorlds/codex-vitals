@@ -52,6 +52,13 @@ struct KeepAwakeOptions: View {
                 .foregroundStyle(controller.isConfirmedOn ? Theme.healthyAccent : .secondary)
             Text("Keep work running with the lid closed.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
+            Text("The built-in screen dims when you close the lid and returns to its previous brightness when you reopen it.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let warning = controller.brightnessWarning {
+                Text(warning).font(.system(size: 11)).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if controller.canStart {
                 Picker("Auto-off", selection: $minutes) {

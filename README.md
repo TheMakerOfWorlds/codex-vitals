@@ -78,6 +78,12 @@ Codex Vitals is designed for using several accounts in rotation without losing t
 
 The conversation and workspace context remain available, while new requests use the switched account's limits and permissions. Switching is always manual. Codex Vitals backs up the local state before applying the selected profile and relaunches the supported desktop app; a running CLI session may close during the handoff.
 
+## Keep awake on macOS
+
+Choose a duration or **Never** in the top Keep awake control to continue working with the lid closed. During the session, Codex Vitals lowers the built-in screen brightness to zero when the lid closes and restores the previous level when it opens. Each close/open cycle remembers your latest brightness; external displays are left alone.
+
+Brightness is also restored before normal sleep is re-enabled when the timer ends, you turn Keep awake off, the app exits, or battery power reaches 15%. macOS administrator approval is required to start a session. If brightness restoration fails, the control shows a warning so you can adjust it with the brightness keys.
+
 ## Account Ordering
 
 Choose **Usage** in Settings to keep the best account to use now near the top, or choose **Manual** to preserve your own order. Dragging a row automatically switches to Manual.

@@ -18,6 +18,7 @@ final class KeepAwakeController: ObservableObject {
     @Published private(set) var phase: Phase = .off
     @Published private(set) var deadline: Date?
     @Published private(set) var message: String?
+    @Published private(set) var brightnessWarning: String?
     @Published private(set) var systemSleepDisabled: Bool?
     @Published private(set) var startingDetail = "Waiting for macOS approval…"
     private let makeTransport: () -> KeepAwakeSessionTransport
@@ -72,6 +73,7 @@ final class KeepAwakeController: ObservableObject {
             return
         }
         message = nil
+        brightnessWarning = nil
         startingDetail = "Waiting for macOS approval…"
         phase = .starting
         generation = UUID()
@@ -93,6 +95,10 @@ final class KeepAwakeController: ObservableObject {
     }
 
     private func receive(_ event: String) {
+        if event == "NOTICE brightness-restore" {
+            brightnessWarning = "macOS could not restore the screen brightness. Use the brightness keys to adjust it."
+            return
+        }
         if event == "CONNECTED" {
             startingDetail = "Approved. Enabling keep awake…"
             return

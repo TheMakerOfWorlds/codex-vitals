@@ -125,6 +125,50 @@ final class KeepAwakeTests: XCTestCase {
         XCTAssertEqual(env.messages.last, "STOPPED stopped")
     }
 
+    func testEverySessionExitRestoresBrightnessBeforeAllowingSleep() {
+        for reason in ["stopped", "closed", "expired", "battery", "changed", "signal"] {
+            let env = SessionEnvironment()
+            env.onWait = {
+                switch reason {
+                case "expired": env.uptime += 60
+                case "battery": env.batteryPercent = 15
+                case "changed": env.sleepDisabled = false
+                case "signal": env.interrupted = true
+                default: return reason
+                }
+                return nil
+            }
+            KeepAwakeSession.run(duration: 60, environment: env)
+            XCTAssertGreaterThan(env.brightnessUpdates, 0)
+            XCTAssertEqual(Array(env.cleanup.suffix(2)), ["brightness", "sleep"])
+        }
+    }
+
+    func testBrightnessRestoreFailureDoesNotBlockSleepRestoration() {
+        let env = SessionEnvironment()
+        env.brightnessRestoreFailures = 3
+        KeepAwakeSession.run(duration: 60, environment: env)
+        XCTAssertEqual(Array(env.messages.suffix(2)), ["NOTICE brightness-restore", "STOPPED stopped"])
+        XCTAssertEqual(env.cleanup, ["brightness", "brightness", "brightness", "sleep"])
+        XCTAssertEqual(env.sleepDisabled, false)
+    }
+
+    @MainActor
+    func testBrightnessWarningDoesNotEndSessionOrGetLostOnStop() async {
+        let transport = FakeTransport()
+        let controller = KeepAwakeController(makeTransport: { transport }, readSleepDisabled: { false })
+        controller.start(minutes: 1)
+        transport.event?("ACTIVE never")
+        transport.event?("NOTICE brightness-restore")
+        await drainEvents()
+        XCTAssertEqual(controller.phase, .active)
+        XCTAssertNotNil(controller.brightnessWarning)
+        transport.event?("STOPPED stopped")
+        await drainEvents()
+        XCTAssertEqual(controller.phase, .off)
+        XCTAssertNotNil(controller.brightnessWarning)
+    }
+
     func testPrivateSocketRoundTripPeerIdentityAndDisconnect() throws {
         let directory = URL(fileURLWithPath: "/private/tmp/vitals-socket-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
@@ -311,7 +355,11 @@ private final class SessionEnvironment: KeepAwakeSessionEnvironment {
     var onWait: () -> String? = { "stopped" }
     var enableSucceeds = true
     var restoreFailures = 0
+    var brightnessUpdates = 0
+    var brightnessRestoreFailures = 0
+    var cleanup: [String] = []
     func setSleepDisabled(_ disabled: Bool) -> Bool {
+        if !disabled { cleanup.append("sleep") }
         changes.append(disabled)
         if !disabled && restoreFailures > 0 { restoreFailures -= 1; return false }
         sleepDisabled = disabled
@@ -320,4 +368,10 @@ private final class SessionEnvironment: KeepAwakeSessionEnvironment {
     func waitForStop() -> String? { onWait() }
     func send(_ message: String) { messages.append(message) }
     func waitBeforeRetry() {}
+    func updateDisplayBrightness() { brightnessUpdates += 1 }
+    func restoreDisplayBrightness() -> Bool {
+        cleanup.append("brightness")
+        if brightnessRestoreFailures > 0 { brightnessRestoreFailures -= 1; return false }
+        return true
+    }
 }

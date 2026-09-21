@@ -49,6 +49,7 @@ Automatic checks and installation are enabled once when migrating from the old f
 - Informational banked-reset counts and expiry dates without the year. Expirations within seven days also display the local time with AM/PM. Fast individual tooltips and accessibility text retain the full date, minute, and time zone. No redemption control.
 - Keep awake supports timed sessions and Never, with explicit approval, startup, active, and shutdown states. Active status is confirmed against the system sleep setting. Never removes the timer; sleep is still restored when the app exits or a discharging battery reaches 15%.
 - A bundled privileged helper requests macOS administrator approval, restores sleep on timeout or connection loss, and reports activation errors directly in the app.
+- During an active session, the helper samples the lid every 500 milliseconds, dims only the built-in display to zero when closed, and restores the saved brightness when opened or before sleep cleanup. DisplayServices is resolved dynamically; unsupported brightness APIs leave displays alone. Failed restoration retries three times and produces a visible warning without blocking sleep restoration.
 - Explicit Renews versus Plan ends, with distinct icons; neutral Cycle ends for older metadata without provenance.
 - Discount expiry is not treated as renewal. Dates are not copied between accounts based on matching workspace display names.
 - Calendar-day countdowns distinguish Today, Tomorrow, and Date passed.
@@ -56,7 +57,8 @@ Automatic checks and installation are enabled once when migrating from the old f
 
 ## Validation
 
-- 127 Swift tests and 40 Windows unit tests passed locally and on GitHub's release runners, including update-preference migration, expiry formatting, keep-awake lifecycle and restoration, and authenticated exhausted-account switching.
+- The lid-brightness change passes 140 Swift tests locally, including repeated lid cycles, automatic brightness changes while closed, failed reads/writes, restoration retries, and every keep-awake exit path. The preceding updater release also passed 40 Windows unit tests locally and on GitHub's release runners.
+- A macOS-authorized hardware test using the same brightness implementation as the privileged helper verified an actual zero-brightness write and restoration to the saved level as root. Physical lid-close/open behavior still needs a hands-on check.
 - Light and dark SwiftUI renderings reviewed.
 - Release build and strict code-signing verification passed.
 - A one-minute administrator-approved keep-awake session confirmed that the system sleep setting became active and returned to normal at expiry. Physical lid-closed behavior was not independently tested.

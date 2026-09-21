@@ -3,14 +3,14 @@
     <channel>
         <title>CodexVitals</title>
         <item>
-            <title>1.6.4.2</title>
-            <pubDate>Sun, 20 Sep 2026 21:11:54 +0000</pubDate>
+            <title>1.6.4.3</title>
+            <pubDate>Mon, 21 Sep 2026 00:19:55 +0000</pubDate>
             <link>https://github.com/TheMakerOfWorlds/codex-vitals</link>
-            <sparkle:fullReleaseNotesLink>https://github.com/TheMakerOfWorlds/codex-vitals/releases/tag/v1.6.4.2</sparkle:fullReleaseNotesLink>
-            <sparkle:version>1.6.4.2</sparkle:version>
-            <sparkle:shortVersionString>1.6.4.2</sparkle:shortVersionString>
+            <sparkle:fullReleaseNotesLink>https://github.com/TheMakerOfWorlds/codex-vitals/releases/tag/v1.6.4.3</sparkle:fullReleaseNotesLink>
+            <sparkle:version>1.6.4.3</sparkle:version>
+            <sparkle:shortVersionString>1.6.4.3</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/TheMakerOfWorlds/codex-vitals/releases/download/v1.6.4.2/CodexVitals-1.6.4.2.zip" length="4145592" type="application/octet-stream" sparkle:edSignature="9UL/RCFV0tYJWhtpN9AGTamEZyNUA8Y9mJkSTn4OO2xWiIiOxjvNHOJ2MJQAjpPB9q+5yM2mbDpKKFXiQ5KADA=="/>
+            <enclosure url="https://github.com/TheMakerOfWorlds/codex-vitals/releases/download/v1.6.4.3/CodexVitals-1.6.4.3.zip" length="4168440" type="application/octet-stream" sparkle:edSignature="+/7BGRiCuXuzP4fJyuBnrltg+ddVBcUhBn9OZZ6KW/LLP6Pu2JcfxHgTvNk7CcurLBMTNXAkvrnv2/Va+RoLAw=="/>
         </item>
     </channel>
 </rss>

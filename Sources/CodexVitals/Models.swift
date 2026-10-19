@@ -278,7 +278,12 @@ struct Account: Identifiable, Equatable, Codable, Sendable {
         !hasError && !usageWindows.isEmpty && usageWindows.allSatisfy { !$0.isExhausted }
     }
 
+    var isClaudeDesktopAccount: Bool {
+        isClaudeAccount && id.hasPrefix("claude-desktop:")
+    }
+
     var canSwitchProviderAccount: Bool {
+        guard !isClaudeDesktopAccount else { return false }
         guard isClaudeAccount else {
             return !hasError && !usageWindows.isEmpty
         }

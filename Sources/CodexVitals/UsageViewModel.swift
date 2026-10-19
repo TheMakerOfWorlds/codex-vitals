@@ -54,6 +54,7 @@ final class UsageViewModel: ObservableObject {
 
     private let service = UsageService()
     private let claudeService = ClaudeAccountService()
+    private let claudeDesktopService = ClaudeDesktopUsageService()
     private let captureService = CodexAccountCaptureService()
     private let switchService = CodexAccountSwitchService()
     private let removalService = LocalAccountRemovalService()
@@ -304,8 +305,17 @@ final class UsageViewModel: ObservableObject {
                 previousAccounts: previousAccounts,
                 previousFetchedAt: previousRefresh
             )
-            let (loadedCodexAccounts, loadedClaudeResult) = await (codexAccounts, claudeResult)
-            let freshlyLoadedAccounts = loadedCodexAccounts + loadedClaudeResult.accounts
+            async let desktopAccount = claudeDesktopService.load()
+            let (loadedCodexAccounts, loadedClaudeResult, desktop) = await (codexAccounts, claudeResult, desktopAccount)
+            var freshlyLoadedAccounts = loadedCodexAccounts + loadedClaudeResult.accounts
+            if let desktop {
+                let desktopAccountID = desktop.id.dropFirst("claude-desktop:".count)
+                    .split(separator: "|").first.map(String.init)
+                let alreadySaved = loadedClaudeResult.accounts.contains {
+                    $0.providerProfileID?.lowercased() == desktopAccountID
+                }
+                if !alreadySaved { freshlyLoadedAccounts.append(desktop) }
+            }
             if let claudeError = loadedClaudeResult.errorMessage {
                 accountActionError = claudeError
             }

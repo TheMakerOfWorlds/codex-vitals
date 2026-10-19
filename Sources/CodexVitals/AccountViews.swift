@@ -238,8 +238,8 @@ struct AccountListView: View {
                 isSwitchBlocked: vm.hasPendingAccountAction && !vm.isSwitchingAccount(acc),
                 isRemoving: vm.isRemoving(acc),
                 isRemoveBlocked: vm.hasPendingAccountAction && !vm.isRemoving(acc),
-                allowsRemoval: true,
-                allowsAlias: true,
+                allowsRemoval: !acc.isClaudeDesktopAccount,
+                allowsAlias: !acc.isClaudeDesktopAccount,
                 allowsReordering: vm.canReorderAccount(acc),
                 relogin: { vm.relogin(acc) },
                 cancelRelogin: { vm.cancelRelogin() },
@@ -686,7 +686,7 @@ struct AccountCompactRow: View {
                 }
                 Divider()
             }
-            if account.isClaudeAccount {
+            if account.isClaudeAccount && account.providerProfileID != nil {
                 Button(account.planRenewalDate == nil
                     ? "Set Plan Renewal Date..."
                     : "Edit Plan Renewal Date...") {

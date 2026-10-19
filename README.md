@@ -99,7 +99,7 @@ Choose **Usage** in Settings to keep the best account to use now near the top, o
 - **macOS:** macOS 13 or newer; ChatGPT installed as `ChatGPT.app`, or the legacy `Codex.app`
 - **Windows:** 64-bit Windows 10 or 11; Codex Desktop for desktop-session switching
 - A Codex CLI installation and accounts you control
-- **Optional Claude support on macOS:** Claude Code installed and available to your user account
+- **Optional Claude support on macOS:** Sign into Claude Desktop for automatic usage monitoring, or install Claude Code to manage saved CLI accounts
 
 ## Installation
 
@@ -107,7 +107,9 @@ Choose **Usage** in Settings to keep the best account to use now near the top, o
 
 Download the latest macOS ZIP from [your repository’s Releases](https://github.com/TheMakerOfWorlds/codex-vitals/releases/latest), unzip it, and place `CodexVitals.app` in `/Applications`. These personal builds use ad-hoc macOS code signing and are not Apple-notarized. Updates are independently signed with this repository’s Ed25519 release key.
 
-To add a Claude account, open Codex Vitals, choose the account-add button, and select **Add Claude Account**. The app starts the official `claude auth login` browser flow, then stores that account's saved credential in its own macOS Keychain service. Switching remains a manual action; Codex Vitals does not automatically rotate accounts.
+If you are already signed into **Claude Desktop**, Codex Vitals automatically shows that account’s plan, 5-hour and weekly usage, and local reset times. No additional login is needed. Vitals reads Desktop’s current account-bound OAuth cache using its existing macOS Keychain encryption key, checks the account identity with Anthropic, and keeps the access token only in memory. Desktop continues to own sign-in and token renewal. This row has no account-switch or removal action; sign out in Desktop to disconnect it. Usage reads respect a 15-minute minimum. This integration depends on Desktop’s local cache format and Anthropic’s usage endpoint, so future changes may require an update.
+
+To add a saved Claude Code account, open Codex Vitals, choose the account-add button, and select **Add Claude Account**. The app starts the official `claude auth login` browser flow, then stores that account's saved credential in its own macOS Keychain service. Switching remains a manual action; Codex Vitals does not automatically rotate accounts.
 
 ### Windows
 
@@ -161,6 +163,7 @@ Codex Vitals is local-first and never syncs tokens or exposes a remote service.
 | `~/Library/Application Support/CodexVitals/backups/<timestamp>-remove-account/` | Backups before removal |
 | macOS Keychain: `com.ramterstudio.CodexVitals.Claude` | Saved Claude credentials |
 | `~/Library/Application Support/CodexVitals/claude-accounts.json` | Non-secret Claude aliases, ordering, workspace labels, visibility, plan metadata, and optional renewal dates |
+| `~/Library/Application Support/Claude/config.json` and Keychain: `Claude Safe Storage` | Read-only access to the current Claude Desktop sign-in; Vitals never writes Desktop credentials or uses its refresh token |
 | `~/.claude.json` and Keychain: `Claude Code-credentials` | Active Claude Code account state; Codex Vitals changes only the active account metadata and credential during a manual switch |
 | `%APPDATA%\CodexVitals\` | Windows accounts, snapshots, settings, and local backups |
 

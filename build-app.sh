@@ -76,7 +76,14 @@ fi
 xattr -cr "$OUT" 2>/dev/null || true
 
 PLIST="${OUT}/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName ${DISPLAY_NAME}" "$PLIST"
+# Finder localizes a bundle name only when the base display name matches
+# its on-disk filename. Keep that filename stable for existing installations.
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName ${PRODUCT_NAME}" "$PLIST"
+mkdir -p "${OUT}/Contents/Resources/en.lproj"
+LOCALIZED_PLIST="${OUT}/Contents/Resources/en.lproj/InfoPlist.strings"
+cp "${ROOT}/Support/en.lproj/InfoPlist.strings" "$LOCALIZED_PLIST"
+plutil -replace CFBundleDisplayName -string "$DISPLAY_NAME" "$LOCALIZED_PLIST"
+plutil -replace CFBundleName -string "$DISPLAY_NAME" "$LOCALIZED_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName ${DISPLAY_NAME}" "$PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${BUNDLE_ID}" "$PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" "$PLIST"

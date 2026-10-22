@@ -141,7 +141,7 @@ Windows build and installer instructions are in [windows/README.md](windows/READ
 
 ### Automatic macOS updates
 
-The Agent Vitals rename preserves the existing bundle identifier, executable and archive names, account-data locations, Keychain services, preferences, update signing key, and GitHub feed. Existing Codex Vitals installations receive the new name through their normal update, with no account migration or reinstall required. The `.app` bundle and download archive retain their `CodexVitals` filenames for compatibility.
+The Agent Vitals rename preserves the existing bundle identifier, executable and archive names, account-data locations, Keychain services, preferences, update signing key, and GitHub feed. Existing Codex Vitals installations receive the new name through their normal update, with no account migration or reinstall required. Finder and the app display **Agent Vitals** using macOS bundle localization. The underlying `.app` bundle and download archive retain their `CodexVitals` filenames for compatibility.
 
 This app checks only `TheMakerOfWorlds/codex-vitals`. Runtime/build changes pushed to `main` run Swift and Windows tests, build a universal Mac app, sign the ZIP with the repository's release key, publish a versioned GitHub release, then update `updates/appcast.xml`. Documentation-only and generated-feed commits do not publish another binary.
 

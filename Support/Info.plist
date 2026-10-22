@@ -7,7 +7,7 @@
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleDisplayName</key>
-	<string>Agent Vitals</string>
+	<string>CodexVitals</string>
 	<key>CFBundleExecutable</key>
 	<string>CodexVitals</string>
 	<key>CFBundleIdentifier</key>

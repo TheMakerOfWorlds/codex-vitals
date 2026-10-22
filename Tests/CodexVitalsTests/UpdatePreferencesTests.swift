@@ -2,6 +2,24 @@ import XCTest
 @testable import CodexVitals
 
 final class UpdatePreferencesTests: XCTestCase {
+    func testAgentVitalsRenamePreservesExistingUpdateIdentity() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let data = try Data(contentsOf: root.appendingPathComponent("Support/Info.plist"))
+        let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        XCTAssertEqual(plist["CFBundleDisplayName"] as? String, AppInfo.name)
+        XCTAssertEqual(plist["CFBundleName"] as? String, "Agent Vitals")
+        // Existing installations, login items, preferences, and signed updates
+        // must continue to recognize this as the same app after the rename.
+        XCTAssertEqual(plist["CFBundleIdentifier"] as? String, "app.codexvitals.menubar")
+        XCTAssertEqual(plist["CFBundleExecutable"] as? String, "CodexVitals")
+        XCTAssertEqual(plist["SUFeedURL"] as? String,
+            "https://raw.githubusercontent.com/TheMakerOfWorlds/codex-vitals/main/updates/appcast.xml")
+        XCTAssertEqual(plist["SUPublicEDKey"] as? String, "vnw3TXixd1tWcKZnvl+LoEhAANTq2OQKBaEyegeycmI=")
+        XCTAssertEqual(plist["SUAutomaticallyUpdate"] as? Bool, true)
+        XCTAssertEqual(plist["SUEnableAutomaticChecks"] as? Bool, true)
+    }
+
     func testRepositoryMigrationEnablesUpdatesAndClearsLegacyFeed() {
         let name = "CodexVitalsTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!

@@ -62,7 +62,7 @@ jobs:
             cp dist/published-feed/appcast.xml dist/sparkle-appcast/appcast.xml
           else
             gh release create "$TAG" "dist/CodexVitals-${VERSION}.zip" dist/sparkle-appcast/appcast.xml \
-              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Codex Vitals ${VERSION}" --generate-notes
+              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Agent Vitals ${VERSION}" --generate-notes
           fi
 
       - name: Publish repository update feed

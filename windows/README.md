@@ -1,6 +1,6 @@
-# Codex Vitals for Windows
+# Agent Vitals for Windows
 
-This folder contains the Windows implementation of Codex Vitals.
+This folder contains the Windows implementation of Agent Vitals.
 
 ## What It Does
 
@@ -50,7 +50,7 @@ This produces:
 - the package SHA-256 file
 
 The package requires Windows 10 version 2004 (build 19041) or newer. It declares
-the `runFullTrust` restricted capability because Codex Vitals is a packaged
+the `runFullTrust` restricted capability because Agent Vitals is a packaged
 desktop application that reads and updates the user's local Codex state.
 
 ## Build the Installer

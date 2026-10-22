@@ -37,7 +37,7 @@ from .stores import AccountStore, SnapshotStore
 from .update_manager import UpdateManager, UpdateManagerError
 
 
-APP_DISPLAY_NAME = "Codex Vitals"
+APP_DISPLAY_NAME = "Agent Vitals"
 APP_INTERNAL_NAME = "CodexVitals"
 HOMEPAGE_URL = "https://github.com/TheMakerOfWorlds/codex-vitals"
 GITHUB_URL = "https://github.com/TheMakerOfWorlds/codex-vitals"
@@ -1377,7 +1377,7 @@ class CodexVitalsWindowsApp:
             value=is_startup_enabled(),
             command=self._set_launch_at_login,
             palette=self.palette,
-            tooltip="Launch Codex Vitals when you sign in",
+            tooltip="Launch Agent Vitals when you sign in",
         )
         self.startup_toggle.pack(side="right", padx=(0, 2))
 
@@ -1479,7 +1479,7 @@ class CodexVitalsWindowsApp:
                 value=self.app_settings.automatically_check_for_updates,
                 command=self._set_automatic_updates,
                 palette=self.palette,
-                tooltip="Check for Codex Vitals updates once per day",
+                tooltip="Check for Agent Vitals updates once per day",
             )
             self.update_toggle.pack(side="right", padx=(0, 2))
 

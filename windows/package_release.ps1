@@ -73,12 +73,12 @@ $publicationDate = [DateTime]::UtcNow.ToString("r", [Globalization.CultureInfo]:
 <?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
-    <title>Codex Vitals Windows Updates</title>
+    <title>Agent Vitals Windows Updates</title>
     <link>https://raw.githubusercontent.com/TheMakerOfWorlds/codex-vitals/main/updates/windows-appcast.xml</link>
-    <description>Codex Vitals updates for the direct Windows release.</description>
+    <description>Agent Vitals updates for the direct Windows release.</description>
     <language>en</language>
     <item>
-      <title>Codex Vitals $Version</title>
+      <title>Agent Vitals $Version</title>
       <pubDate>$publicationDate</pubDate>
       <sparkle:releaseNotesLink>$releaseNotesUrl</sparkle:releaseNotesLink>
       <enclosure
@@ -97,7 +97,7 @@ $hash = (Get-FileHash -Algorithm SHA256 $installerPath).Hash.ToLowerInvariant()
 Set-Content -LiteralPath $hashPath -Value "$hash  $installerName" -Encoding ASCII
 
 @"
-# Codex Vitals for Windows $Version
+# Agent Vitals for Windows $Version
 
 Initial public Windows release.
 

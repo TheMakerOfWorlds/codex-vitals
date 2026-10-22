@@ -1,4 +1,4 @@
-Codex Vitals includes code adapted from the following open-source projects.
+Agent Vitals includes code adapted from the following open-source projects.
 
 The Claude Spark logo is an Anthropic brand asset obtained from Anthropic's
 official press kit and is used only to identify Claude within the app.

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Codex Vitals.
+Thanks for helping improve Agent Vitals.
 
 Before opening a pull request:
 

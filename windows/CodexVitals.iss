@@ -2,7 +2,9 @@
   #define MyAppVersion "1.0.0"
 #endif
 
-#define MyAppName "Codex Vitals"
+#define MyAppName "Agent Vitals"
+; Keep existing shortcut names so upgrades do not leave duplicate startup entries.
+#define MyShortcutName "Codex Vitals"
 #define MyAppPublisher "Keystone Science"
 #define MyAppURL "https://github.com/TheMakerOfWorlds/codex-vitals"
 #define MyAppExeName "CodexVitals.exe"
@@ -17,7 +19,7 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={localappdata}\Programs\CodexVitals
-DefaultGroupName={#MyAppName}
+DefaultGroupName={#MyShortcutName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
@@ -51,9 +53,9 @@ Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "third-party\WinSparkle-LICENSE.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autostartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--hidden"; Tasks: startup
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyShortcutName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autostartup}\{#MyShortcutName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--hidden"; Tasks: startup
+Name: "{autodesktop}\{#MyShortcutName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent

@@ -57,7 +57,7 @@ if ($EnableStartup) {
     $shortcut.Arguments = "--hidden"
     $shortcut.WorkingDirectory = $installDir
     $shortcut.IconLocation = $installedExe
-    $shortcut.Description = "Launch Codex Vitals at sign-in"
+    $shortcut.Description = "Launch Agent Vitals at sign-in"
     $shortcut.Save()
 } elseif (Test-Path -LiteralPath $startupShortcut) {
     Remove-Item -LiteralPath $startupShortcut -Force
@@ -72,7 +72,7 @@ $shortcut = $shell.CreateShortcut($programShortcut)
 $shortcut.TargetPath = $installedExe
 $shortcut.WorkingDirectory = $installDir
 $shortcut.IconLocation = $installedExe
-$shortcut.Description = "Open Codex Vitals"
+$shortcut.Description = "Open Agent Vitals"
 $shortcut.Save()
 
 if (Test-Path -LiteralPath $legacyExe) {

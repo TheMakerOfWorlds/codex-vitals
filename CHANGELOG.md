@@ -4,6 +4,8 @@ All notable changes to Codex Vitals will be documented here.
 
 ## Unreleased
 
+- Rename the app to Agent Vitals across its interface, macOS display metadata, and Windows display labels. Keep the existing application identity, saved accounts, update feed, signing key, and distribution filenames so existing installations update in place.
+
 - Automatically display the signed-in Claude Desktop account’s plan, usage, and reset times without another login. Read the current Desktop session without changing its credentials, validate the account identity, and limit usage requests to once every 15 minutes.
 
 - While macOS Keep awake is active, lower the built-in display brightness to zero when the lid closes and restore its previous level when it opens. Preserve the saved level across repeated polls and restore it before ending the session; external displays are untouched.

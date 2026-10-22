@@ -1,4 +1,4 @@
-# Codex Vitals: Codex and Claude account usage from the menu bar
+# Agent Vitals: Codex and Claude account usage from the menu bar
 
 **Keystone Science — Nathan Stone and Jackson Stone**
 
@@ -25,12 +25,12 @@ See [personal macOS builds](docs/LOCAL_DEVELOPMENT.md) for build commands, updat
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="Codex Vitals menu bar usage dashboard with sanitized sample accounts" width="900">
+  <img src="docs/screenshot.png" alt="Agent Vitals menu bar usage dashboard with sanitized sample accounts" width="900">
 </p>
 
 ## Overview
 
-**Codex Vitals** helps you monitor OpenAI Codex usage, reset windows, account state, and workspaces from the macOS menu bar or Windows system tray. On macOS it also manages Claude Code accounts natively. Codex and Claude remain independently signed in and switch independently.
+**Agent Vitals** (formerly Codex Vitals) helps you monitor OpenAI Codex usage, reset windows, account state, and workspaces from the macOS menu bar or Windows system tray. On macOS it also manages Claude Code accounts natively. Codex and Claude remain independently signed in and switch independently.
 
 - View best-effort Codex quota and usage across all your accounts
 - On macOS, see each Codex account's banked reset count and every known expiration date and time in a separate read-only column on the far right
@@ -47,7 +47,7 @@ See [personal macOS builds](docs/LOCAL_DEVELOPMENT.md) for build commands, updat
 - Check for signed app updates and enable automatic installation
 - Identify invalid or deactivated accounts
 
-> **Disclaimer:** Codex Vitals is not affiliated with OpenAI or Anthropic. It does not change provider limits, share accounts, or automate account cycling. It only helps you view local usage state and manually switch between accounts you control.
+> **Disclaimer:** Agent Vitals is not affiliated with OpenAI or Anthropic. It does not change provider limits, share accounts, or automate account cycling. It only helps you view local usage state and manually switch between accounts you control.
 
 ## Features
 
@@ -57,7 +57,7 @@ See [personal macOS builds](docs/LOCAL_DEVELOPMENT.md) for build commands, updat
 - **Display Aliases** — Local-only account labels for easier scanning while preserving the real email for auth and copy actions
 - **Account Health** — Visual indicators for invalid or deactivated accounts
 - **One-Click Switching** — Apply a saved account to Codex CLI and the supported desktop app
-- **Claude Accounts on macOS** — Add, label, group, reorder, monitor 5-hour, 7-day, and available Fable 5 weekly limits, reconnect, hide, and explicitly switch Claude Code accounts inside Codex Vitals
+- **Claude Accounts on macOS** — Add, label, group, reorder, monitor 5-hour, 7-day, and available Fable 5 weekly limits, reconnect, hide, and explicitly switch Claude Code accounts inside Agent Vitals
 - **Claude Plan Context** — Detect available Claude plan metadata and optionally show a locally entered plan renewal date
 - **Passive Auth Mirroring** — Codex-managed token rotations are mirrored back into saved local profiles
 - **Local-First** — All data stays on your machine; no cloud sync
@@ -69,18 +69,18 @@ See [personal macOS builds](docs/LOCAL_DEVELOPMENT.md) for build commands, updat
 
 ## Check, Switch, and Continue
 
-Codex Vitals is designed for using several accounts in rotation without losing track of your work:
+Agent Vitals is designed for using several accounts in rotation without losing track of your work:
 
 1. **Check remaining usage** — Compare the quota left on every saved account and find one with capacity.
 2. **Press the switch button** — Choose that account directly from the menu bar list.
 3. **Use it in the CLI and desktop app** — The selected account becomes active for new Codex CLI runs and for ChatGPT on macOS or Codex Desktop on Windows.
 4. **Continue the same conversation** — Session history is stored locally, so `/resume` or `codex resume` can reopen earlier work even after the account changes.
 
-The conversation and workspace context remain available, while new requests use the switched account's limits and permissions. Switching is always manual. Codex Vitals backs up the local state before applying the selected profile and relaunches the supported desktop app; a running CLI session may close during the handoff.
+The conversation and workspace context remain available, while new requests use the switched account's limits and permissions. Switching is always manual. Agent Vitals backs up the local state before applying the selected profile and relaunches the supported desktop app; a running CLI session may close during the handoff.
 
 ## Keep awake on macOS
 
-Choose a duration or **Never** in the top Keep awake control to continue working with the lid closed. During the session, Codex Vitals lowers the built-in screen brightness to zero when the lid closes and restores the previous level when it opens. Each close/open cycle remembers your latest brightness; external displays are left alone.
+Choose a duration or **Never** in the top Keep awake control to continue working with the lid closed. During the session, Agent Vitals lowers the built-in screen brightness to zero when the lid closes and restores the previous level when it opens. Each close/open cycle remembers your latest brightness; external displays are left alone.
 
 Brightness is also restored before normal sleep is re-enabled when the timer ends, you turn Keep awake off, the app exits, or battery power reaches 15%. macOS administrator approval is required to start a session. If brightness restoration fails, the control shows a warning so you can adjust it with the brightness keys.
 
@@ -107,9 +107,9 @@ Choose **Usage** in Settings to keep the best account to use now near the top, o
 
 Download the latest macOS ZIP from [your repository’s Releases](https://github.com/TheMakerOfWorlds/codex-vitals/releases/latest), unzip it, and place `CodexVitals.app` in `/Applications`. These personal builds use ad-hoc macOS code signing and are not Apple-notarized. Updates are independently signed with this repository’s Ed25519 release key.
 
-If you are already signed into **Claude Desktop**, Codex Vitals automatically shows that account’s plan, 5-hour and weekly usage, and local reset times. No additional login is needed. Vitals reads Desktop’s current account-bound OAuth cache using its existing macOS Keychain encryption key, checks the account identity with Anthropic, and keeps the access token only in memory. Desktop continues to own sign-in and token renewal. This row has no account-switch or removal action; sign out in Desktop to disconnect it. Usage reads respect a 15-minute minimum. This integration depends on Desktop’s local cache format and Anthropic’s usage endpoint, so future changes may require an update.
+If you are already signed into **Claude Desktop**, Agent Vitals automatically shows that account’s plan, 5-hour and weekly usage, and local reset times. No additional login is needed. Vitals reads Desktop’s current account-bound OAuth cache using its existing macOS Keychain encryption key, checks the account identity with Anthropic, and keeps the access token only in memory. Desktop continues to own sign-in and token renewal. This row has no account-switch or removal action; sign out in Desktop to disconnect it. Usage reads respect a 15-minute minimum. This integration depends on Desktop’s local cache format and Anthropic’s usage endpoint, so future changes may require an update.
 
-To add a saved Claude Code account, open Codex Vitals, choose the account-add button, and select **Add Claude Account**. The app starts the official `claude auth login` browser flow, then stores that account's saved credential in its own macOS Keychain service. Switching remains a manual action; Codex Vitals does not automatically rotate accounts.
+To add a saved Claude Code account, open Agent Vitals, choose the account-add button, and select **Add Claude Account**. The app starts the official `claude auth login` browser flow, then stores that account's saved credential in its own macOS Keychain service. Switching remains a manual action; Agent Vitals does not automatically rotate accounts.
 
 ### Windows
 
@@ -141,6 +141,8 @@ Windows build and installer instructions are in [windows/README.md](windows/READ
 
 ### Automatic macOS updates
 
+The Agent Vitals rename preserves the existing bundle identifier, executable and archive names, account-data locations, Keychain services, preferences, update signing key, and GitHub feed. Existing Codex Vitals installations receive the new name through their normal update, with no account migration or reinstall required. The `.app` bundle and download archive retain their `CodexVitals` filenames for compatibility.
+
 This app checks only `TheMakerOfWorlds/codex-vitals`. Runtime/build changes pushed to `main` run Swift and Windows tests, build a universal Mac app, sign the ZIP with the repository's release key, publish a versioned GitHub release, then update `updates/appcast.xml`. Documentation-only and generated-feed commits do not publish another binary.
 
 Automatic checks run hourly; automatic downloads and installation on quit are enabled. Both choices remain adjustable in Settings. Moving from the older personal build enables them once, then preserves later user choices.
@@ -149,7 +151,7 @@ The signing key stays in the release Mac's Keychain and the repository's `SPARKL
 
 ## Data & Privacy
 
-Codex Vitals is local-first and never syncs tokens or exposes a remote service.
+Agent Vitals is local-first and never syncs tokens or exposes a remote service.
 
 ### Local Files
 
@@ -164,10 +166,10 @@ Codex Vitals is local-first and never syncs tokens or exposes a remote service.
 | macOS Keychain: `com.ramterstudio.CodexVitals.Claude` | Saved Claude credentials |
 | `~/Library/Application Support/CodexVitals/claude-accounts.json` | Non-secret Claude aliases, ordering, workspace labels, visibility, plan metadata, and optional renewal dates |
 | `~/Library/Application Support/Claude/config.json` and Keychain: `Claude Safe Storage` | Read-only access to the current Claude Desktop sign-in; Vitals never writes Desktop credentials or uses its refresh token |
-| `~/.claude.json` and Keychain: `Claude Code-credentials` | Active Claude Code account state; Codex Vitals changes only the active account metadata and credential during a manual switch |
+| `~/.claude.json` and Keychain: `Claude Code-credentials` | Active Claude Code account state; Agent Vitals changes only the active account metadata and credential during a manual switch |
 | `%APPDATA%\CodexVitals\` | Windows accounts, snapshots, settings, and local backups |
 
-All sensitive files are written with `0600` permissions. Codex profile removal creates a local backup before deleting profile data. Removing an inactive Claude profile deletes its saved app credential and metadata; removing the currently active Claude profile only hides it from Codex Vitals and leaves Claude Code signed in. Re-adding the active account restores it to the list.
+All sensitive files are written with `0600` permissions. Codex profile removal creates a local backup before deleting profile data. Removing an inactive Claude profile deletes its saved app credential and metadata; removing the currently active Claude profile only hides it from Agent Vitals and leaves Claude Code signed in. Re-adding the active account restores it to the list.
 
 ### Network Calls
 
@@ -189,7 +191,7 @@ For Claude support on macOS, the app uses the official Claude Code CLI for inter
 
 These are not official public APIs and may change without notice.
 
-The banked-reset endpoint is queried with `GET` only. Codex Vitals displays the returned count and expiration metadata but provides no reset-redemption action.
+The banked-reset endpoint is queried with `GET` only. Agent Vitals displays the returned count and expiration metadata but provides no reset-redemption action.
 
 Automatic usage refresh defaults to 10 minutes. Account metadata is cached for 6 hours during automatic refreshes. Manual refresh requests fresh Codex usage and metadata immediately; Claude usage remains limited to once per account every 15 minutes and honors Anthropic `Retry-After` responses while retaining the last successful reading.
 
@@ -205,9 +207,9 @@ Application update checks are separate from account refreshes. Sparkle checks ho
 
 ## FAQ
 
-### Does Codex Vitals work with OpenAI Codex?
+### Does Agent Vitals work with OpenAI Codex?
 
-Yes. Codex Vitals is built for local OpenAI Codex account usage visibility and manual account switching on macOS and Windows.
+Yes. Agent Vitals is built for local OpenAI Codex account usage visibility and manual account switching on macOS and Windows.
 
 ### Does it track Codex quota and reset windows?
 
@@ -215,11 +217,11 @@ It shows best-effort Codex usage and reset timing from the local app using your 
 
 ### Does it switch Codex accounts automatically?
 
-No. Codex Vitals does not automate account cycling. It only changes the active local Codex account after an explicit manual action.
+No. Agent Vitals does not automate account cycling. It only changes the active local Codex account after an explicit manual action.
 
 ### Does account switching work in both the CLI and desktop app?
 
-Yes. Check which account still has capacity, press its switch button, and Codex Vitals applies it to new Codex CLI runs and to ChatGPT on macOS or Codex Desktop on Windows.
+Yes. Check which account still has capacity, press its switch button, and Agent Vitals applies it to new Codex CLI runs and to ChatGPT on macOS or Codex Desktop on Windows.
 
 ### Will switching accounts remove my Codex sessions?
 
@@ -227,17 +229,17 @@ No. Session history remains stored locally, so earlier conversations can be reop
 
 ### Does it upload tokens or account data?
 
-No. Codex Vitals is local-first and does not sync tokens, account data, or usage snapshots to a third-party service.
+No. Agent Vitals is local-first and does not sync tokens, account data, or usage snapshots to a third-party service.
 
 ### How does Claude support work?
 
-On macOS, Codex Vitals imports the currently active Claude Code account, stores saved account credentials in an app-specific Keychain service, and queries best-effort 5-hour and 7-day usage. When Anthropic reports a scoped Fable 5 limit, the app also shows its weekly remaining usage and reset time in a separate detail row. Available account metadata is used to display the Claude plan, while an optional plan renewal date can be entered locally. Accounts can be grouped into named workspaces and reordered. Adding or reconnecting uses Claude Code's official browser login. Switching is explicit and transactional, affects Claude Code only, and preserves unrelated `~/.claude.json` settings. Claude support is not yet included in the Windows build.
+On macOS, Agent Vitals imports the currently active Claude Code account, stores saved account credentials in an app-specific Keychain service, and queries best-effort 5-hour and 7-day usage. When Anthropic reports a scoped Fable 5 limit, the app also shows its weekly remaining usage and reset time in a separate detail row. Available account metadata is used to display the Claude plan, while an optional plan renewal date can be entered locally. Accounts can be grouped into named workspaces and reordered. Adding or reconnecting uses Claude Code's official browser login. Switching is explicit and transactional, affects Claude Code only, and preserves unrelated `~/.claude.json` settings. Claude support is not yet included in the Windows build.
 
 ## Contributing
 
 Issues and pull requests are welcome. Please keep changes local-first, avoid token logging, and run the platform-specific tests before opening a PR.
 
-Codex Vitals is maintainer-led and provided on a best-effort basis. Response times and the inclusion of proposed changes are not guaranteed.
+Agent Vitals is maintainer-led and provided on a best-effort basis. Response times and the inclusion of proposed changes are not guaranteed.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 

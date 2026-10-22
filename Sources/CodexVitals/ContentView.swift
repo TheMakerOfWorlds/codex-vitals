@@ -252,7 +252,7 @@ struct HeaderView: View {
     }
 
     private var appBrandLockup: some View {
-        Text("Codex Vitals")
+        Text(AppInfo.name)
             .font(.system(size: 17, weight: .semibold))
             .foregroundStyle(.primary)
             .fixedSize()

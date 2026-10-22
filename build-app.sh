@@ -13,7 +13,7 @@
 #
 # Usage:
 #   ./build-app.sh
-#   DISPLAY_NAME="Codex Vitals" PRODUCT_NAME="CodexVitals" ./build-app.sh
+#   DISPLAY_NAME="Agent Vitals" PRODUCT_NAME="CodexVitals" ./build-app.sh
 #
 # Signing note: local builds default to ad-hoc signing. Public distribution
 # builds should pass a Developer ID Application identity and be notarized.
@@ -23,7 +23,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
 PRODUCT_NAME="${PRODUCT_NAME:-CodexVitals}"
-DISPLAY_NAME="${DISPLAY_NAME:-Codex Vitals}"
+DISPLAY_NAME="${DISPLAY_NAME:-Agent Vitals}"
 BUNDLE_ID="${BUNDLE_ID:-app.codexvitals.menubar}"
 DEFAULT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${ROOT}/Support/Info.plist")"
 VERSION="${VERSION:-$DEFAULT_VERSION}"

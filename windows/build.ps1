@@ -25,7 +25,7 @@ if ($pythonCommand) {
 }
 
 if (-not [Environment]::Is64BitProcess) {
-    throw "Codex Vitals requires a 64-bit Python build."
+    throw "Agent Vitals requires a 64-bit Python build."
 }
 
 $distDir = Join-Path $windowsRoot "dist"
@@ -89,12 +89,12 @@ VSVersionInfo(
         '040904B0',
         [
           StringStruct('CompanyName', 'Keystone Science'),
-          StringStruct('FileDescription', 'Codex Vitals for Windows'),
+          StringStruct('FileDescription', 'Agent Vitals for Windows'),
           StringStruct('FileVersion', '$dottedFileVersion'),
           StringStruct('InternalName', 'CodexVitals'),
           StringStruct('LegalCopyright', 'Copyright 2026 Keystone Science. Nathan Stone and Jackson Stone.'),
           StringStruct('OriginalFilename', 'CodexVitals.exe'),
-          StringStruct('ProductName', 'Codex Vitals'),
+          StringStruct('ProductName', 'Agent Vitals'),
           StringStruct('ProductVersion', '$Version')
         ]
       )

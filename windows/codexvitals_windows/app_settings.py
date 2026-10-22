@@ -152,7 +152,7 @@ def _build_shortcut_script(
     target_literal = _powershell_literal(str(target))
     arguments_literal = _powershell_literal(arguments)
     working_directory_literal = _powershell_literal(str(working_directory))
-    description = _powershell_literal("Launch Codex Vitals at sign-in")
+    description = _powershell_literal("Launch Agent Vitals at sign-in")
     icon = _powershell_literal(f"{target},0")
     return "\n".join(
         [
